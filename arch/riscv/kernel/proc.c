@@ -30,7 +30,7 @@ int get_max_cnt_pid(void) {
 }
 
 void task_init(void) {
-    srand(2024);
+    srand(2025);
 
     idle = alloc_page();
     idle->pid = 0;
@@ -45,11 +45,7 @@ void task_init(void) {
         task[i] = alloc_page();
         task[i]->pid = i;
         task[i]->state = TASK_RUNNING;
-#ifndef ONBOARD
         task[i]->priority = randint(PRIORITY_MIN, PRIORITY_MAX);
-#else
-        task[i]->priority = 2;
-#endif
         task[i]->counter = 0;
 
         task[i]->thread.ra = (uint64_t)&__dummy;
@@ -72,7 +68,7 @@ void dummy_task(void) {
 #ifdef ONBOARD
             printk("[P=%" PRIu64 "] %" PRIu64 "\n", current->pid, ++local);
 #else
-            printk("[PID = %" PRIu64 "] Running. local = %" PRIu32 ", counter = %" PRIu64 "\n", current->pid, ++local, current->counter);
+            printk("[PID = %" PRIu64 " @ 0x%" PRIx64 "] Running. local = %" PRIu32 ", counter = %" PRIu64 "\n", current->pid, current->thread.sp, ++local, current->counter);
 #endif
         }
     }

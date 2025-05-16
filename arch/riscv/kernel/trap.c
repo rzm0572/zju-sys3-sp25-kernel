@@ -6,6 +6,8 @@ void clock_set_next_event(void);
 
 void supervisor_timer_interrupt_handler(uint64_t scause, uint64_t sepc) {
     // printk("%s", "[S] Supervisor timer interrupt\n");
+    (void)scause;
+    (void)sepc;
     clock_set_next_event();   // 先设置下一次时钟中断，因为 do_timer 不一定返回到这里
     do_timer();
 }

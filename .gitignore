@@ -1,4 +1,5 @@
 *.o
+*.d
 System.map
 arch/riscv/boot
 vmlinux

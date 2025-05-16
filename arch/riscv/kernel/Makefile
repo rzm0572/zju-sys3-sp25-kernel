@@ -9,10 +9,10 @@ OBJ = $(patsubst %.c,%.o,$(SRC_C)) $(patsubst %.S,%.o,$(SRC_S))
 all: $(OBJ)
 
 %.o:%.c
-	$(GCC) $(CFLAG) -c $< -o $@
+	$(GCC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -c $<
 
 %.o:%.S
-	$(GCC) $(CFLAG) -c $< -o $@
+	$(GCC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -c $<
 
 clean:
-	rm -rf *.o
+	rm -rf *.o *.d

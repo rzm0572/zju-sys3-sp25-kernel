@@ -3,9 +3,8 @@
 #include <sbi.h>
 
 _Noreturn void start_kernel(void) {
-  printk("a");
   
-  printk("2024 ZJU Computer System II\n");
+  printk("2025 ZJU Computer System III\n");
 
   // 等待第一次时钟中断
   while (1)

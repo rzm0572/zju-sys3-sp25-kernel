@@ -6,8 +6,15 @@ _start:
     # 0. 设置 sp
     la sp, _sbss
 
-    # 1. 初始化内存空间
+    # 1.a 初始化页表
+    call setup_vm
+    call relocate
+
+    # 1.b 初始化内存空间
     call mm_init
+
+    # 1.c 设置最终的三级页表映射关系
+    call setup_vm_final
 
     # 2. 初始化线程
     call task_init
@@ -47,5 +54,30 @@ _start:
     # 7. 跳转到 start_kernel
     j start_kernel
 
-    .section .bss.stack
+    .globl relocate
+relocate:
+    # modify ra and sp from PA to VA
+    li t0, PA2VA_OFFSET
+    add ra, ra, t0
+    add sp, sp, t0
+
+    # set stvec to VA of label 1
+    # la a0, 1f
+    # add a0, a0, t0
+    # csrrw a1, stvec, a0
+
+    # calculate satp
+    li t2, SATP_MODE
+    la t1, early_pgtbl
+    srai t1, t1, PAGE_SHIFT
+    add t2, t2, t1
+
+# .align 2
+# 1:
+    sfence.vma zero, zero
+    csrw satp, t2
+#     csrw stvec, a1    # restore stvec
+    ret
+
+.section .bss.stack
     .space PGSIZE
