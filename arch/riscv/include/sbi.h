@@ -17,18 +17,6 @@
 #define SBI_DEBUG_CONSOLE_WRITE_BYTE_FID 2
 #define SBI_SET_TIMER__FID 0
 
-#define csr_read(csr)                                        \
-  ({                                                         \
-    uint64_t __v;                                            \
-    asm volatile("csrr %0, " #csr : "=r"(__v) : : "memory"); \
-    __v;                                                     \
-  })
-
-#define csr_write(csr, val)                                    \
-  ({                                                           \
-    uint64_t __v = (uint64_t)(val);                            \
-    asm volatile("csrw " #csr ", %0" : : "r"(__v) : "memory"); \
-  })
 
 struct sbiret {
     uint64_t error;

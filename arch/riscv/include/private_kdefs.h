@@ -20,6 +20,9 @@
 
 #define PA2VA_OFFSET (VM_START - PHY_START)
 
+#define USER_START 0x0
+#define USER_END   0x4000000000
+
 #define PGSIZE 0x1000
 #define PGROUNDDOWN(addr) ((addr) & ~(PGSIZE - 1))
 #define PGROUNDUP(addr) PGROUNDDOWN((addr) + PGSIZE - 1)

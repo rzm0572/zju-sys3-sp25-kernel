@@ -5,7 +5,8 @@
 #include <stdarg.h>
 
 typedef struct FILE {
-  size_t (*write)(struct FILE *, const void *, size_t);
+  unsigned fd;
+  int (*write)(struct FILE *, const void *, size_t);
 } FILE;
 
 #define stdin (&__iob[0])
@@ -15,5 +16,9 @@ typedef struct FILE {
 extern FILE __iob[3];
 
 int vfprintf(FILE *restrict f, const char *restrict fmt, va_list ap);
+
+int printf(const char *restrict fmt, ...);
+
+int fileno(FILE *restrict f);
 
 #endif
