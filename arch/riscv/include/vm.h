@@ -12,6 +12,7 @@
 #define SV39_PTE_G 0x20
 #define SV39_PTE_A 0x40
 #define SV39_PTE_D 0x80
+#define SV39_PTE_S 0x100
 #define SV39_EARLY_PTE_PPN_BEGIN 28
 #define SV39_PTE_PPN_BEGIN 10
 #define SV39_PTE_PPN_END 53
@@ -47,6 +48,6 @@ void setup_vm_final(void);
  */
 void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa, uint64_t sz, uint64_t perm);
 
-uint64_t* get_physical_address(uint64_t pgtbl[static PGSIZE / 8], uint64_t* va);
+uint64_t* walk_page_table(uint64_t pgtbl[static PGSIZE / 8], uint64_t* va);
 
 #endif
