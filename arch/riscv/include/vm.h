@@ -21,6 +21,9 @@
 
 #define GET_SUBBITMAP(bitmap, low, high) ((bitmap) >> (low) & ((1ULL << ((high) - (low) + 1)) - 1))
 #define TRUNCATE(bitmap, num_bits) ((bitmap) & ((1ULL << (num_bits)) - 1))
+#define SV39_PTE(ppn, perm) TRUNCATE(((ppn) << SV39_PTE_PPN_BEGIN | (perm)), SV39_PTE_PPN_END + 1)
+#define SV39_GET_PERM(pte) TRUNCATE(pte, SV39_PTE_PPN_BEGIN)
+#define SV39_GET_PPN(pte) GET_SUBBITMAP(pte, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END)
 
 #define PPN2PHYS(x) ((uint64_t)(x) << 12)
 #define PHYS2PPN(x) ((uint64_t)(x) >> 12)
@@ -48,6 +51,10 @@ void setup_vm_final(void);
  */
 void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa, uint64_t sz, uint64_t perm);
 
+void copy_mapping(uint64_t dst_pgtbl[static PGSIZE / 8], uint64_t src_pgtbl[static PGSIZE / 8]);
+
+int is_valid_pte(uint64_t* pte_ptr);
+uint64_t* walk_page_table_pte(uint64_t pgtbl[static PGSIZE / 8], uint64_t vpn);
 uint64_t* walk_page_table(uint64_t pgtbl[static PGSIZE / 8], uint64_t* va);
 
 #endif

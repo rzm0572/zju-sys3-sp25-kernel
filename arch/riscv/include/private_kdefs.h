@@ -30,5 +30,6 @@
 #define SATP_MODE 0x8000000000000000
 #define PAGE_SHIFT 12
 
+#define INVALID_PA (uint64_t*)0xdeadbeef
 
 #endif

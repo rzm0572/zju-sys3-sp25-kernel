@@ -55,4 +55,6 @@ int ref_page(void *va);
  */
 int deref_page(void *va);
 
+uint64_t get_ref_cnt(void *pa);
+
 #endif

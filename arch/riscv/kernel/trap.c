@@ -1,3 +1,4 @@
+#include "private_kdefs.h"
 #include <printk.h>
 #include <stdint.h>
 #include <string.h>
@@ -7,6 +8,10 @@
 #include <ksyscalls.h>
 #include <mm.h>
 #include <vm.h>
+
+#define KERNEL_COLOR "\x1b[43m"
+#define ERROR_COLOR "\x1b[31m"
+#define RESET_COLOR "\x1b[0m"
 
 #define SCAUSE_INST_PAGE_FAULT  0x0000000c
 #define SCAUSE_LOAD_PAGE_FAULT  0x0000000d
@@ -20,7 +25,7 @@ extern uint8_t _suapp[];
 void clock_set_next_event(void);
 
 void supervisor_timer_interrupt_handler(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
-    // printk("%s", "\x1b[43m[S]\x1b[0m Supervisor timer interrupt\n");
+    // printk("%s", KERNEL_COLOR "[S]" RESET_COLOR " Supervisor timer interrupt\n");
     (void)regs;
     (void)scause;
     (void)stval;
@@ -49,8 +54,12 @@ void ecall_from_user_mode_handler(struct pt_regs *regs, uint64_t scause, uint64_
             ret = sys_getpid();
             break;
         }
+        case __NR_clone: {
+            ret = sys_clone(regs);
+            break;
+        }
         default: {
-            printk("[S] Not implemented syscall: %" PRIu64 "\n", syscall_nr);
+            printk(ERROR_COLOR "[S] Not implemented syscall: %" PRIu64 RESET_COLOR "\n", syscall_nr);
             break;
         }
     }
@@ -58,6 +67,11 @@ void ecall_from_user_mode_handler(struct pt_regs *regs, uint64_t scause, uint64_
 }
 
 uint64_t vma_flags_to_perm(uint64_t flags) {
+    // TODO: 现在对 D 位采用的是最简单的处理方式，即认为所有可写的页都是 dirty 页
+    //       但是实际上对可写的页的访问不一定是写入操作，因而可写的页不一定是 dirty 页
+    //       解决方法是在设置可写的页的映射时，若此次 page fault 的类型不是 Store/AMO，则不设置 D 位
+    //       若之后需要写入，由于 D 位没有设置，又会触发 page fault，此时再设置 D 位
+    //       缺点是需要两次 page fault
     uint64_t perm = SV39_PTE_V | SV39_PTE_U | SV39_PTE_A;
     if (flags & VM_READ)  perm |= SV39_PTE_R;
     if (flags & VM_WRITE) perm |= SV39_PTE_W | SV39_PTE_D;
@@ -74,37 +88,77 @@ void do_page_fault(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
     
     // If the bad vaddr is not belong to any vm area, then it's an invalid address
     if (vma == NULL) {
-        printk("\x1b[31m[S] Page fault at invalid address: 0x%p, reason: VMA not found\x1b[0m\n", bad_vaddr);
+        printk(ERROR_COLOR "[S] Page fault at invalid address: 0x%p, reason: VMA not found" RESET_COLOR "\n", bad_vaddr);
         return;
     }
 
     // If the page fault is caused by instruction access, check if the page is executable
-    if (scause == SCAUSE_INST_PAGE_FAULT && !(vma->vm_flags & VM_EXEC)) {
-        printk("\x1b[31m[S] Instruction access fault at address: 0x%p, reason: not executable\x1b[0m\n", bad_vaddr);
-        return;
+    if (scause == SCAUSE_INST_PAGE_FAULT) {
+        printk(KERNEL_COLOR "[S]" RESET_COLOR " Instruction page fault; sepc = 0x%" PRIx64 ", stval = 0x%" PRIx64 "\n", regs->sepc, stval);
+        if (!(vma->vm_flags & VM_EXEC)) {
+            printk(ERROR_COLOR "[S] Instruction page fault at invalid address: 0x%p, reason: not executable" RESET_COLOR "\n", bad_vaddr);
+            return;
+        }
     }
 
     // If the page fault is caused by load access, check if the page is readable
-    if (scause == SCAUSE_LOAD_PAGE_FAULT && !(vma->vm_flags & VM_READ)) {
-        printk("\x1b[31m[S] Load access fault at address: 0x%p, reason: not readable\x1b[0m\n", bad_vaddr);
-        return;
+    if (scause == SCAUSE_LOAD_PAGE_FAULT) {
+        printk(KERNEL_COLOR "[S]" RESET_COLOR " Load page fault; sepc = 0x%" PRIx64 ", stval = 0x%" PRIx64 "\n", regs->sepc, stval);
+        if (!(vma->vm_flags & VM_READ)) {
+            printk(ERROR_COLOR "[S] Load page fault at invalid address: 0x%p, reason: not readable" RESET_COLOR "\n", bad_vaddr);
+            return;
+        }
     }
 
     // If the page fault is caused by store access, check if the page is writable
-    if (scause == SCAUSE_STORE_PAGE_FAULT && !(vma->vm_flags & VM_WRITE)) {
-        printk("\x1b[31m[S] Store access fault at address: 0x%p, reason: not writable\x1b[0m\n", bad_vaddr);
-        return;
+    if (scause == SCAUSE_STORE_PAGE_FAULT) {
+        printk(KERNEL_COLOR "[S]" RESET_COLOR " Store/AMO page fault; sepc = 0x%" PRIx64 ", stval = 0x%" PRIx64 "\n", regs->sepc, stval);
+        if (!(vma->vm_flags & VM_WRITE)) {
+            printk(ERROR_COLOR "[S] Store/AMO page fault at invalid address: 0x%p, reason: not writable" RESET_COLOR "\n", bad_vaddr);
+            return;
+        }
     }
 
     // The bad vaddr is valid, allocate a new page and map it to the vma
     void* new_page = alloc_page();
-    uint64_t va_rounddown = PGROUNDDOWN((uint64_t)bad_vaddr);
-    if (!(vma->vm_flags & VM_ANON)) {
-        void* uapp_page = _suapp + va_rounddown;
-        memcpy(new_page, uapp_page, PGSIZE);
+    uint64_t *va_rounddown = (uint64_t*)PGROUNDDOWN((uint64_t)bad_vaddr);
+    uint64_t vpn = (uint64_t)va_rounddown >> PAGE_SHIFT;
+    uint64_t *pte_ptr = walk_page_table_pte(current->pgd, vpn);
+
+    if (!is_valid_pte(pte_ptr)) {
+        if (!(vma->vm_flags & VM_ANON)) {
+            void* uapp_page = _suapp + (uint64_t)va_rounddown;
+            memcpy(new_page, uapp_page, PGSIZE);
+        }
+        create_mapping(current->pgd, va_rounddown, (void*)VA2PA(new_page), PGSIZE, vma_flags_to_perm(vma->vm_flags));
+        
+        asm volatile("sfence.vma" : : : "memory");
+    } else {
+        uint64_t *pa = (uint64_t*)(GET_SUBBITMAP(*pte_ptr, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END) << PAGE_SHIFT);
+        if (scause == SCAUSE_STORE_PAGE_FAULT && (*pte_ptr & SV39_PTE_S)) {
+            uint64_t ref_cnt = get_ref_cnt(pa);
+            if (ref_cnt >= 2) {
+                memcpy(new_page, va_rounddown, PGSIZE);
+                deref_page((void*)PA2VA(pa));
+
+                uint64_t new_ppn = PHYS2PPN(VA2PA(new_page));
+                uint64_t new_perm = vma_flags_to_perm(vma->vm_flags);
+                *pte_ptr = SV39_PTE(new_ppn, new_perm);
+                asm volatile("sfence.vma" : : : "memory");
+
+                printk("vma = 0x%" PRIx64 ", SHARED PAGE [PID = %" PRIu64 "], copy 0x%" PRIx64 " to 0x%" PRIx64 "\n", (uint64_t)vma, current->pid, (uint64_t)pa, (uint64_t)VA2PA(new_page));
+            } else if (ref_cnt == 1) {
+                *pte_ptr &= ~SV39_PTE_S;
+                if (vma->vm_flags & VM_WRITE) {
+                    *pte_ptr |= SV39_PTE_W;
+                }
+
+                asm volatile("sfence.vma" : : : "memory");
+            }
+        }
     }
 
-    create_mapping(current->pgd, (void*)va_rounddown, (void*)VA2PA(new_page), PGSIZE, vma_flags_to_perm(vma->vm_flags));
+    
 }
 
 struct handler_table {
@@ -138,6 +192,6 @@ void trap_handler(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
     }
     // printk("[Trap] scause: %" PRIx64 ", sepc: %" PRIx64 "\n", scause, sepc);
     if (!handled) {
-        // printk("[S] Unhandled trap: scause = %" PRIx64 ", stval = %" PRIx64 "\n", scause, stval);
+        printk("[S] Unhandled trap: scause = %" PRIx64 ", stval = %" PRIx64 "\n", scause, stval);
     }
 }

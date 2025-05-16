@@ -14,6 +14,7 @@ _traps:
     
     sd x0, 0x00(sp)
     sd ra, 0x08(sp)
+    sd sp, 0x10(sp)   # regs
     sd gp, 0x18(sp)
     sd tp, 0x20(sp)
     sd t0, 0x28(sp)
@@ -59,6 +60,8 @@ _traps:
     csrr a2, stval
     call trap_handler
 
+    .globl ret_from_fork
+ret_from_fork:
     # 恢复当前用户态栈指针的值
     ld t0, 0x108(sp)
     csrw sscratch, t0

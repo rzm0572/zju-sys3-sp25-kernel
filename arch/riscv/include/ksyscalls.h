@@ -5,8 +5,11 @@
 #include <stdint.h>
 #include <syscalls.h>
 
+struct pt_regs;
+
 long sys_write(unsigned fd, const char *buf, size_t count);
 long sys_getpid(void);
+long sys_clone(struct pt_regs *regs);
 
 typedef long (*syscall_handler_t)();
 

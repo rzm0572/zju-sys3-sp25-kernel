@@ -7,7 +7,7 @@
 #define TASK_RUNNING 0 // 为了简化实验，所有的线程都只有一种状态
 
 // 可自行修改的宏定义
-#define NR_TASKS (1 + 4) // idle 线程 + 用户线程
+#define NR_TASKS (1 + 8) // idle 线程 + 用户线程
 #define PRIORITY_MIN 1
 #define PRIORITY_MAX 10
 
@@ -17,6 +17,7 @@ typedef uint64_t *pagetable_t;
 struct pt_regs {
   uint64_t x[32];
   uint64_t sepc;
+  uint64_t sscratch;
 };
 
 
@@ -142,5 +143,7 @@ struct vm_area_struct *find_vma(struct mm_struct *mm, void *va);
  * @return 该映射的起始地址
  */
 void *do_mmap(struct mm_struct *mm, void *va, size_t len, unsigned flags);
+
+long do_fork(struct pt_regs *regs);
 
 #endif

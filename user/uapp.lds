@@ -7,15 +7,20 @@ SECTIONS
     . = 0;
 
     .text : {
+        _stext_user = .;
         *(.text.init)
         *(.text .text.*)
+        _etext_user = .;
     }
 
     .rodata : {
+        _srodata_user = .;
         *(.rodata .rodata*)
+        _erodata_user = .;
     }
 
     .data : {
+        _sdata_user = .;
         *(.data .data.*)
 
         /*
@@ -34,5 +39,6 @@ SECTIONS
          */
         *(.sbss .sbss.*)
         *(.bss .bss.*)
+        _edata_user = .;
     }
 }

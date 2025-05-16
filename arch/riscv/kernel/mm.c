@@ -1,9 +1,12 @@
 #include <mm.h>
+#include <vm.h>
 #include <string.h>
 #include <printk.h>
 #include <sbi.h>
+#include <proc.h>
 
 extern uint8_t _ekernel[];
+extern struct task_struct* current;
 
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
@@ -184,6 +187,11 @@ int deref_page(void *va) {
   }
   buddy_pfn_decref(pfn);
   return 0;
+}
+
+uint64_t get_ref_cnt(void *pa) {
+  uint64_t pfn = PHYS2PFN(pa);
+  return buddy.ref_cnt[pfn];
 }
 
 void mm_init(void) __attribute__((alias("buddy_init")));
