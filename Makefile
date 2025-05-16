@@ -1,4 +1,4 @@
-CROSS_ := riscv64-linux-gnu-
+CROSS_ := riscv64-unknown-linux-gnu-
 export GCC := ${CROSS_}gcc
 export LD := ${CROSS_}ld
 export OBJCOPY := ${CROSS_}objcopy
