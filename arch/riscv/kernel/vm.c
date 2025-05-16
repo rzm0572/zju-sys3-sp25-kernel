@@ -111,7 +111,7 @@ void create_mapping_page(uint64_t pgtbl[static PGSIZE / 8], uint64_t _vpn, uint6
         perm = perm | SV39_PTE_D;
     }
 
-    page_table[vpn[0]] = SV39_PTE(_ppn, perm | SV39_PTE_V);
+    page_table[vpn[0]] = SV39_PTE(_ppn, perm);
 }
 
 void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa,
