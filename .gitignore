@@ -1,0 +1,11 @@
+*.o
+System.map
+arch/riscv/boot
+vmlinux
+vmlinux.asm
+compile_commands.json
+.cache/
+*.gdb
+*.map
+*.elf
+*.bin
