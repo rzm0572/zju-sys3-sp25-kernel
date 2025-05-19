@@ -7,6 +7,7 @@
 #include <string.h>
 #include <private_kdefs.h>
 #include <csr.h>
+#include <elf.h>
 
 static struct task_struct *task[NR_TASKS]; // 线程数组，所有的线程都保存在此
 static struct task_struct *idle;           // idle 线程
@@ -40,6 +41,30 @@ int get_max_cnt_pid(void) {
     return max_cnt_pid;
 }
 
+void load_program(struct task_struct *task, struct mm_struct *mm) {
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)_suapp;
+    Elf64_Phdr *phdrs = (Elf64_Phdr *)(_suapp + ehdr->e_phoff);
+    for (int i = 0; i < ehdr->e_phnum; i++) {
+        Elf64_Phdr *phdr = phdrs + i;
+        if (phdr->p_type == PT_LOAD) {
+            uint64_t start_va = PGROUNDDOWN(phdr->p_vaddr);
+            uint64_t end_va = PGROUNDUP(phdr->p_vaddr + phdr->p_memsz);
+            unsigned int flags = 0;
+            if (phdr->p_flags & PF_R) {
+                flags |= VM_READ;
+            }
+            if (phdr->p_flags & PF_W) {
+                flags |= VM_WRITE;
+            }
+            if (phdr->p_flags & PF_X) {
+                flags |= VM_EXEC;
+            }
+            do_mmap(mm, (void *)start_va, (size_t)(end_va - start_va), flags);
+        }
+    }
+    task->thread.sepc = ehdr->e_entry;
+}
+
 void task_init(void) {
     srand(2025);
 
@@ -64,7 +89,6 @@ void task_init(void) {
         task[i]->thread.ra = (uint64_t)&__dummy;
         task[i]->thread.sp = (uint64_t)task[i] + PGSIZE;
         
-        task[i]->thread.sepc = USER_START;
         csr_set_bit(task[i]->thread.sstatus, CSR_SSTATUS_SPP, 0);  // set spp = 0
         csr_set_bit(task[i]->thread.sstatus, CSR_SSTATUS_SUM, 1);  // set sum = 1
 
@@ -81,9 +105,15 @@ void task_init(void) {
         mm->mmap = NULL;
         mm->num_vmas = 0;
 
-        do_mmap(mm, (void*)USER_START, (size_t)(_euapp - _suapp), VM_READ | VM_WRITE | VM_EXEC);
-        do_mmap(mm, (void*)(USER_END - PGSIZE), (size_t)PGSIZE, VM_READ | VM_WRITE | VM_ANON);
-        
+        Elf64_Ehdr *ehdr = (Elf64_Ehdr*)_suapp;
+        if (ehdr->e_ident[EI_MAG0] != ELFMAG0 || ehdr->e_ident[EI_MAG1] != ELFMAG1 || ehdr->e_ident[EI_MAG2] != ELFMAG2 || ehdr->e_ident[EI_MAG3] != ELFMAG3) {
+            task[i]->thread.sepc = USER_START;
+            do_mmap(mm, (void*)USER_START, (size_t)(_euapp - _suapp), VM_READ | VM_WRITE | VM_EXEC);
+        }
+        else {
+            load_program(task[i], mm);
+        }
+        do_mmap(mm, (void*)(USER_END - PGSIZE), (size_t)PGSIZE, VM_READ | VM_WRITE | VM_ANON); 
         task[i]->mm = mm;
     }
 
