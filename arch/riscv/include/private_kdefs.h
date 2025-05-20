@@ -1,7 +1,7 @@
 #ifndef __PRIVATE_KDEFS_H__
 #define __PRIVATE_KDEFS_H__
 
-// #define ONBOARD
+#define ONBOARD
 
 #ifdef ONBOARD
     #define TIMECLOCK 200000
@@ -11,7 +11,13 @@
 #endif
 
 #define PHY_START 0x80000000
-#define PHY_SIZE  0x8000000
+
+#ifdef ONBOARD
+    #define PHY_SIZE 0x400000
+#else
+    #define PHY_SIZE  0x8000000
+#endif
+
 #define PHY_END   (PHY_START + PHY_SIZE)
 
 #define VM_START 0xffffffe000000000

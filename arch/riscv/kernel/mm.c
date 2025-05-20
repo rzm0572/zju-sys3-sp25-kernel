@@ -1,4 +1,39 @@
 #include <mm.h>
+
+#ifdef ONBOARD
+
+#include <stdint.h>
+#include <printk.h>
+
+extern uint8_t _ekernel[];
+
+static struct kfreelist {
+  struct kfreelist *next;
+} *kfreelist;
+
+void *alloc_page(void) {
+  struct kfreelist *r = kfreelist;
+  kfreelist = r->next;
+  return r;
+}
+
+void free_pages(void *addr) {
+  struct kfreelist *r = (void *)PGROUNDDOWN((uintptr_t)addr);
+  r->next = kfreelist;
+  kfreelist = r;
+}
+
+void mm_init(void) {
+  uint8_t *s = (void *)PGROUNDUP((uintptr_t)_ekernel);
+  const uint8_t *e = (void *)(PHY_END + PA2VA_OFFSET);
+  for (; s + PGSIZE <= e; s += PGSIZE) {
+    free_pages(s);
+  }
+}
+
+#else
+
+#include <mm.h>
 #include <string.h>
 #include <printk.h>
 #include <sbi.h>
@@ -131,11 +166,15 @@ static void buddy_init(void) {
   buddy.size = buddy_size;
   buddy.bitmap = free_page_start;
   free_page_start = (uint8_t *)free_page_start + 2 * buddy.size * sizeof(*buddy.bitmap);
+#ifndef ONBOARD
   memset(buddy.bitmap, 0, 2 * buddy.size * sizeof(*buddy.bitmap));
+#endif
   // alloc space for ref_cnt
   buddy.ref_cnt = free_page_start;
   free_page_start = (uint8_t *)free_page_start + buddy.size * sizeof(*buddy.ref_cnt);
+#ifndef ONBOARD
   memset(buddy.ref_cnt, 0, buddy.size * sizeof(*buddy.ref_cnt));
+#endif
 
   uint64_t node_size = 2 * buddy.size;
   for (uint64_t i = 0; i < 2 * buddy.size - 1; ++i) {
@@ -187,3 +226,5 @@ int deref_page(void *va) {
 }
 
 void mm_init(void) __attribute__((alias("buddy_init")));
+
+#endif
