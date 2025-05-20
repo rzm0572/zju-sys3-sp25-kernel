@@ -127,7 +127,7 @@ void do_page_fault(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
 
     if (!is_valid_pte(pte_ptr)) {
         if (!(vma->vm_flags & VM_ANON)) {
-            void* uapp_page = _suapp + (uint64_t)va_rounddown;
+            void* uapp_page = (_suapp + vma->vm_pgoff) + ((uint64_t)va_rounddown - (uint64_t)vma->vm_start);
             memcpy(new_page, uapp_page, PGSIZE);
         }
         create_mapping(current->pgd, va_rounddown, (void*)VA2PA(new_page), PGSIZE, vma_flags_to_perm(vma->vm_flags));

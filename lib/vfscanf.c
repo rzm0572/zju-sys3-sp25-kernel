@@ -24,6 +24,9 @@ static int in(FILE *f, char *s, size_t l) {
 }
 
 int scanf_core(FILE *f, const char *fmt, va_list *ap, union arg *nl_arg, int *nl_type) {
+    (void)nl_arg;
+    (void)nl_type;
+    
     int matched = 0;
     while (*fmt) {
         while (isspace(*fmt)) {

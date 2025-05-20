@@ -41,7 +41,7 @@ int get_max_cnt_pid(void) {
     return max_cnt_pid;
 }
 
-void load_program(struct task_struct *task, struct mm_struct *mm) {
+void load_program(struct task_struct *task) {
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)_suapp;
     Elf64_Phdr *phdrs = (Elf64_Phdr *)(_suapp + ehdr->e_phoff);
     for (int i = 0; i < ehdr->e_phnum; i++) {
@@ -59,7 +59,7 @@ void load_program(struct task_struct *task, struct mm_struct *mm) {
             if (phdr->p_flags & PF_X) {
                 flags |= VM_EXEC;
             }
-            do_mmap(mm, (void *)start_va, (size_t)(end_va - start_va), flags);
+            do_mmap(task->mm, (void *)start_va, (size_t)(end_va - start_va), flags, phdr->p_offset, phdr->p_filesz);
         }
     }
     task->thread.sepc = ehdr->e_entry;
@@ -101,20 +101,20 @@ void task_init(void) {
         copy_mapping(task[i]->pgd, swapper_pg_dir);
 
         // Create VMA for user program
-        struct mm_struct *mm = (struct mm_struct*)alloc_page();
+        task[i]->mm = (struct mm_struct*)alloc_page();
+        struct mm_struct *mm = task[i]->mm;
         mm->mmap = NULL;
         mm->num_vmas = 0;
 
         Elf64_Ehdr *ehdr = (Elf64_Ehdr*)_suapp;
         if (ehdr->e_ident[EI_MAG0] != ELFMAG0 || ehdr->e_ident[EI_MAG1] != ELFMAG1 || ehdr->e_ident[EI_MAG2] != ELFMAG2 || ehdr->e_ident[EI_MAG3] != ELFMAG3) {
             task[i]->thread.sepc = USER_START;
-            do_mmap(mm, (void*)USER_START, (size_t)(_euapp - _suapp), VM_READ | VM_WRITE | VM_EXEC);
+            do_mmap(mm, (void*)USER_START, (size_t)(_euapp - _suapp), VM_READ | VM_WRITE | VM_EXEC, 0, (uint64_t)(_euapp - _suapp));
         }
         else {
-            load_program(task[i], mm);
+            load_program(task[i]);
         }
-        do_mmap(mm, (void*)(USER_END - PGSIZE), (size_t)PGSIZE, VM_READ | VM_WRITE | VM_ANON); 
-        task[i]->mm = mm;
+        do_mmap(mm, (void*)(USER_END - PGSIZE), (size_t)PGSIZE, VM_READ | VM_WRITE | VM_ANON, 0, 0);
     }
 
     for (uint64_t i = num_tasks; i < NR_TASKS; i++) {
@@ -199,7 +199,7 @@ struct vm_area_struct* find_vma(struct mm_struct* mm, void* va) {
     return NULL;
 }
 
-void* do_mmap(struct mm_struct* mm, void* va, size_t len, unsigned flags) {
+void* do_mmap(struct mm_struct* mm, void* va, size_t len, unsigned flags, uint64_t pgoff, uint64_t filesz) {
     struct vm_area_struct* vma;
     if (mm->mmap == NULL) {
         mm->mmap = (struct vm_area_struct*)((unsigned char*)mm + sizeof(struct mm_struct));
@@ -238,6 +238,8 @@ void* do_mmap(struct mm_struct* mm, void* va, size_t len, unsigned flags) {
     vma->vm_start = va;
     vma->vm_end = (void*)((unsigned char*)va + len);
     vma->vm_flags = flags;
+    vma->vm_pgoff = pgoff;
+    vma->vm_filesz = filesz;
 
     mm->num_vmas++;
 
@@ -259,10 +261,8 @@ void* copy_mm(struct mm_struct* dst, const struct mm_struct* src) {
     struct vm_area_struct* src_vma = src->mmap;
     struct vm_area_struct* dst_vma = dst->mmap;
     while (src_vma != NULL) {
+        memcpy(dst_vma, src_vma, sizeof(struct vm_area_struct));
         dst_vma->vm_mm = dst;
-        dst_vma->vm_start = src_vma->vm_start;
-        dst_vma->vm_end = src_vma->vm_end;
-        dst_vma->vm_flags = src_vma->vm_flags;
         dst_vma->vm_prev = src_vma->vm_prev == NULL ? NULL : (struct vm_area_struct*)((uint64_t)src_vma->vm_prev + delta);
         dst_vma->vm_next = src_vma->vm_next == NULL ? NULL : (struct vm_area_struct*)((uint64_t)src_vma->vm_next + delta);
         src_vma = src_vma->vm_next;

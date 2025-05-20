@@ -80,6 +80,16 @@ struct vm_area_struct {
    */
   struct vm_area_struct *vm_prev;
   struct vm_area_struct *vm_next;
+
+  /**
+   * @brief Offset of the area in the file (if any)
+   */
+  uint64_t vm_pgoff;
+
+  /**
+   * @brief Size of the area in the file (if any)
+   */
+  uint64_t vm_filesz;
 };
 
 struct mm_struct {
@@ -139,10 +149,12 @@ struct vm_area_struct *find_vma(struct mm_struct *mm, void *va);
  * @param va 要添加的 vm_area_struct 的起始地址
  * @param len vm_area_struct 记录的长度
  * @param flags vm_area_struct 的权限位
+ * @param pgoff vm_area_struct 起始地址对应的文件内容相对文件起始位置的偏移量
+ * @param filesz vm_area_struct 对应的文件内容的长度
  *
  * @return 该映射的起始地址
  */
-void *do_mmap(struct mm_struct *mm, void *va, size_t len, unsigned flags);
+void *do_mmap(struct mm_struct *mm, void *va, size_t len, unsigned flags, uint64_t pgoff, uint64_t filesz);
 
 long do_fork(struct pt_regs *regs);
 
