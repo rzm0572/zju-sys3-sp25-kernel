@@ -6,6 +6,7 @@
 
 typedef struct FILE {
   unsigned fd;
+  int (*read)(struct FILE *, void *, size_t);
   int (*write)(struct FILE *, const void *, size_t);
 } FILE;
 
@@ -14,6 +15,10 @@ typedef struct FILE {
 #define stderr (&__iob[2])
 
 extern FILE __iob[3];
+
+int vfscanf(FILE *restrict f, const char *restrict fmt, va_list ap);
+
+int scanf(FILE *restrict f, const char *restrict fmt, ...);
 
 int vfprintf(FILE *restrict f, const char *restrict fmt, va_list ap);
 

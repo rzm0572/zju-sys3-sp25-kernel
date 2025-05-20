@@ -33,7 +33,7 @@ SPIKE_CONF := $(realpath $(CURDIR)/../../../repo/sys-project/spike)
 
 run: all
 	# Launch the qemu ......
-	qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios $(SPIKE_CONF)/fw_jump.bin
+	qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios $(SPIKE_CONF)/fw_jump.bin 
 
 debug: all
 	# Launch the qemu for debug ......
