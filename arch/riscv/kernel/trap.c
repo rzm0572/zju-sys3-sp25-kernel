@@ -1,6 +1,9 @@
 #include <printk.h>
 #include <stdint.h>
 #include <proc.h>
+#include <mm.h>
+
+typedef void (*trap_handler_t)(uint64_t scause, uint64_t sepc);
 
 void clock_set_next_event(void);
 
@@ -12,12 +15,13 @@ void supervisor_timer_interrupt_handler(uint64_t scause, uint64_t sepc) {
     do_timer();
 }
 
-struct handler_table {
+const struct handler_table {
     unsigned char interrupt;
     unsigned char exception_code;
-    void (*handler)(uint64_t scause, uint64_t sepc);
+    // void (*handler)(uint64_t scause, uint64_t sepc);
+    trap_handler_t handler;
 } handler_table_entry[] = {
-    {1, 5, supervisor_timer_interrupt_handler}
+    {1, 5, FUNC_PTR_TRANS(supervisor_timer_interrupt_handler, trap_handler_t)}
 };
 
 void trap_handler(uint64_t scause, uint64_t sepc) {

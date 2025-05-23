@@ -10,6 +10,12 @@
 #define PFN2PHYS(x) (((uint64_t)(x) << 12) + PHY_START)
 #define PHYS2PFN(x) (((uint64_t)(x) - PHY_START) >> 12)
 
+#ifdef ONBOARD
+    #define FUNC_PTR_TRANS(func, type) (type)PA2VA(func)
+#else
+    #define FUNC_PTR_TRANS(func, type) (type)func
+#endif
+
 /**
  * @brief 内存管理初始化函数
  */
