@@ -79,29 +79,24 @@ void setup_vm_final(void) {
     return;
 }
 
+void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa,
+                    uint64_t sz, uint64_t perm) {
+    
+    uint64_t vpn_low_ = (uint64_t)va >> PAGE_SHIFT;
+    uint64_t vpn_high_ = ((uint64_t)va + sz - 1) >> PAGE_SHIFT;
+    uint64_t ppn = (uint64_t)pa >> PAGE_SHIFT;
 
-void create_mapping_page(uint64_t pgtbl[static PGSIZE / 8], uint64_t _vpn, uint64_t _ppn, uint64_t perm) {
-    uint64_t vpn[3] = {
-        extract_bits(&_vpn, SV39_VPN_LEN),
-        extract_bits(&_vpn, SV39_VPN_LEN),
-        extract_bits(&_vpn, SV39_VPN_LEN)
+    uint64_t vpn_low[3] = {
+        extract_bits(&vpn_low_, SV39_VPN_LEN),
+        extract_bits(&vpn_low_, SV39_VPN_LEN),
+        extract_bits(&vpn_low_, SV39_VPN_LEN)
     };
 
-    uint64_t* page_table = (uint64_t*)pgtbl;
-    for (int i = 2; i >= 1; i--) {
-        uint64_t pte = page_table[vpn[i]];
-        uint64_t ppn = GET_SUBBITMAP(pte, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END);
-        uint64_t* new_page_table = (uint64_t*)PA2VA(PPN2PHYS(ppn));
-        
-        if (!PTE_HAS_PERM(pte, V)) {
-            new_page_table = (uint64_t*)alloc_page();
-            memset(new_page_table, 0, PGSIZE);
-            uint64_t new_ppn = PHYS2PPN(VA2PA(new_page_table));
-            page_table[vpn[i]] = SV39_PTE(new_ppn, SV39_PTE_V);
-        }
-
-        page_table = new_page_table;
-    }
+    uint64_t vpn_high[3] = {
+        extract_bits(&vpn_high_, SV39_VPN_LEN),
+        extract_bits(&vpn_high_, SV39_VPN_LEN),
+        extract_bits(&vpn_high_, SV39_VPN_LEN)
+    };
 
     // If Svadu extension is not available and Svade extension is available, then exception will be triggered if:
     // 1. pte.a = 0 if page is accessed
@@ -112,21 +107,42 @@ void create_mapping_page(uint64_t pgtbl[static PGSIZE / 8], uint64_t _vpn, uint6
         perm = perm | SV39_PTE_D;
     }
 
-    page_table[vpn[0]] = SV39_PTE(_ppn, perm);
-}
+    uint64_t* page_table_root = (uint64_t*)pgtbl;
+    for (uint64_t vpn_root = vpn_low[2]; vpn_root <= vpn_high[2]; vpn_root++) {
+        uint64_t pte_root = page_table_root[vpn_root];
+        uint64_t ppn_root = GET_SUBBITMAP(pte_root, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END);
+        uint64_t* page_table_first = (uint64_t*)PA2VA(PPN2PHYS(ppn_root));
+        
+        if (!PTE_HAS_PERM(pte_root, V)) {
+            page_table_first = (uint64_t*)alloc_page();
+            memset(page_table_first, 0, PGSIZE);
+            uint64_t new_ppn = PHYS2PPN(VA2PA(page_table_first));
+            page_table_root[vpn_root] = SV39_PTE(new_ppn, SV39_PTE_V);
+        }
 
-void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa,
-                    uint64_t sz, uint64_t perm) {
-    // TODO：将 create_mapping 改写成三层嵌套循环的方式，以提升效率
+        uint64_t vpn_first_low = vpn_root == vpn_low[2] ? vpn_low[1] : 0ULL;
+        uint64_t vpn_first_high = vpn_root == vpn_high[2] ? vpn_high[1] : (1ULL << SV39_VPN_LEN) - 1;
+        for (uint64_t vpn_first = vpn_first_low; vpn_first <= vpn_first_high; vpn_first++) {
+            uint64_t pte_first = page_table_first[vpn_first];
+            uint64_t ppn_first = GET_SUBBITMAP(pte_first, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END);
+            uint64_t* page_table_second = (uint64_t*)PA2VA(PPN2PHYS(ppn_first));
 
-    uint64_t vpn_low = (uint64_t)va >> PAGE_SHIFT;
-    uint64_t vpn_high = ((uint64_t)va + sz - 1) >> PAGE_SHIFT;
-    uint64_t ppn_low = (uint64_t)pa >> PAGE_SHIFT;
+            if (!PTE_HAS_PERM(pte_first, V)) {
+                page_table_second = (uint64_t*)alloc_page();
+                memset(page_table_second, 0, PGSIZE);
+                uint64_t new_ppn = PHYS2PPN(VA2PA(page_table_second));
+                page_table_first[vpn_first] = SV39_PTE(new_ppn, SV39_PTE_V);
+            }
 
-    for (uint64_t vpn = vpn_low, ppn = ppn_low; vpn <= vpn_high; vpn++, ppn++) {
-        create_mapping_page(pgtbl, vpn, ppn, perm);
+            uint64_t vpn_second_low = (vpn_root == vpn_low[2] && vpn_first == vpn_low[1]) ? vpn_low[0] : 0ULL;
+            uint64_t vpn_second_high = (vpn_root == vpn_high[2] && vpn_first == vpn_high[1]) ? vpn_high[0] : (1ULL << SV39_VPN_LEN) - 1;
+            for (uint64_t vpn_second = vpn_second_low; vpn_second <= vpn_second_high; vpn_second++) {
+                page_table_second[vpn_second] = SV39_PTE(ppn, perm);
+                ppn++;
+            }
+        }
     }
-
+    
     printk("pgtbl = 0x%" PRIx64 ": map [0x%" PRIx64 ", 0x%" PRIx64 ") -> [0x%" PRIx64 ", 0x%" PRIx64 "), perm = 0x%" PRIx64 ", size=%" PRId64 "\n", (uint64_t)pgtbl, (uint64_t)va, (uint64_t)va + sz, (uint64_t)pa, (uint64_t) pa + sz, perm, sz);
 }
 
