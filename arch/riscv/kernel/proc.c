@@ -1,3 +1,4 @@
+#include <reg.h>
 #include <vm.h>
 #include <mm.h>
 #include <proc.h>
@@ -11,12 +12,15 @@ static struct task_struct *task[NR_TASKS]; // 线程数组，所有的线程都�
 static struct task_struct *idle;           // idle 线程
 struct task_struct *current;               // 当前运行线程
 
+uint64_t num_tasks;
+
 extern uint64_t swapper_pg_dir[PGSIZE / 8] __attribute__((__aligned__(PGSIZE)));
 extern uint8_t _suapp[];
 extern uint8_t _euapp[];
 
 void __dummy(void);
 void __switch_to(struct task_struct *prev, struct task_struct *next);
+void ret_from_fork(void);
 
 int randint(int low, int high) {
   if (low == high) {
@@ -28,7 +32,7 @@ int randint(int low, int high) {
 
 int get_max_cnt_pid(void) {
     int max_cnt_pid = 0;
-    for (uint64_t i = 1; i < NR_TASKS; i++) {
+    for (uint64_t i = 1; i < num_tasks; i++) {
         if (task[i]->counter > task[max_cnt_pid]->counter) {
             max_cnt_pid = i;
         }
@@ -47,8 +51,10 @@ void task_init(void) {
 
     current = idle;
     task[0] = idle;
+
+    num_tasks = 2;
     
-    for (uint64_t i = 1; i < NR_TASKS; i++) {
+    for (uint64_t i = 1; i < num_tasks; i++) {
         task[i] = alloc_page();
         task[i]->pid = i;
         task[i]->state = TASK_RUNNING;
@@ -74,21 +80,23 @@ void task_init(void) {
         task[i]->thread.stval = 0;
         task[i]->thread.scause = 0;
 
-        // set pre-thread page table
+        // set per-thread page table
         task[i]->pgd = (pagetable_t)alloc_page();   // VA
-        memcpy(task[i]->pgd, swapper_pg_dir, PGSIZE);
+        copy_mapping(task[i]->pgd, swapper_pg_dir);
 
-        // set user stack
-        uint64_t* user_stack = (uint64_t*)alloc_page();
-        create_mapping(task[i]->pgd, (uint64_t*)(USER_END - PGSIZE), (uint64_t*)VA2PA(user_stack), PGSIZE, SV39_PTE_R | SV39_PTE_W | SV39_PTE_U);
+        // Create VMA for user program
+        struct mm_struct *mm = (struct mm_struct*)alloc_page();
+        mm->mmap = NULL;
+        mm->num_vmas = 0;
 
-        // set user program
-        uint64_t uapp_begin_page = (uint64_t)_suapp >> PAGE_SHIFT;
-        uint64_t uapp_end_page = ((uint64_t)_euapp - 1) >> PAGE_SHIFT;
-        uint64_t uapp_pages = uapp_end_page - uapp_begin_page + 1;
-        uint64_t* uapp = (uint64_t*)alloc_pages(uapp_pages);
-        memcpy(uapp, (uint64_t*)(uapp_begin_page << PAGE_SHIFT), uapp_pages << PAGE_SHIFT);
-        create_mapping(task[i]->pgd, (uint64_t*)USER_START, (uint64_t*)VA2PA(uapp), uapp_pages << PAGE_SHIFT, SV39_PTE_R | SV39_PTE_W | SV39_PTE_X | SV39_PTE_U);
+        do_mmap(mm, (void*)USER_START, (size_t)(_euapp - _suapp), VM_READ | VM_WRITE | VM_EXEC);
+        do_mmap(mm, (void*)(USER_END - PGSIZE), (size_t)PGSIZE, VM_READ | VM_WRITE | VM_ANON);
+        
+        task[i]->mm = mm;
+    }
+
+    for (uint64_t i = num_tasks; i < NR_TASKS; i++) {
+        task[i] = NULL;
     }
 
     printk("...task_init done!\n");
@@ -142,7 +150,7 @@ void do_timer(void) {
 void schedule(void) {
     int max_cnt_pid = get_max_cnt_pid();
     if (max_cnt_pid == 0) {
-        for (uint64_t i = 1; i < NR_TASKS; i++) {
+        for (uint64_t i = 1; i < num_tasks; i++) {
             task[i]->counter = task[i]->priority;
 
 #ifdef ONBOARD
@@ -154,4 +162,140 @@ void schedule(void) {
         max_cnt_pid = get_max_cnt_pid();
     }
     switch_to(task[max_cnt_pid]);
+}
+
+struct vm_area_struct* find_vma(struct mm_struct* mm, void* va) {
+    struct vm_area_struct* vma = mm->mmap;
+    while (vma != NULL) {
+        if (va < vma->vm_start) {
+            return NULL;
+        } else if (va < vma->vm_end) {
+            return vma;
+        }
+        vma = vma->vm_next;
+    }
+    return NULL;
+}
+
+void* do_mmap(struct mm_struct* mm, void* va, size_t len, unsigned flags) {
+    struct vm_area_struct* vma;
+    if (mm->mmap == NULL) {
+        mm->mmap = (struct vm_area_struct*)((unsigned char*)mm + sizeof(struct mm_struct));
+
+        vma = mm->mmap;
+        vma->vm_prev = NULL;
+        vma->vm_next = NULL;
+    } else {
+        vma = mm->mmap + mm->num_vmas;
+        struct vm_area_struct* curr = mm->mmap;
+        struct vm_area_struct* prev = NULL;
+        while (curr != NULL) {
+            if (va < curr->vm_start) {
+                break;
+            }
+            prev = curr;
+            curr = curr->vm_next;
+        }
+
+        if (prev == NULL) {
+            vma->vm_prev = NULL;
+            vma->vm_next = mm->mmap;
+            mm->mmap->vm_prev = vma;
+            mm->mmap = vma;
+        } else {
+            vma->vm_next = curr;
+            vma->vm_prev = prev;
+            prev->vm_next = vma;
+            if (curr != NULL) {
+                curr->vm_prev = vma;
+            }
+        }
+    }
+
+    vma->vm_mm = mm;
+    vma->vm_start = va;
+    vma->vm_end = (void*)((unsigned char*)va + len);
+    vma->vm_flags = flags;
+
+    mm->num_vmas++;
+
+    return va;
+}
+
+void* copy_mm(struct mm_struct* dst, const struct mm_struct* src) {
+    if (src->mmap == NULL) {
+        dst->mmap = NULL;
+        dst->num_vmas = 0;
+        return dst;
+    }
+
+    uint64_t delta = (uint64_t)dst - (uint64_t)src;
+    
+    dst->mmap = (struct vm_area_struct*)((uint64_t)src->mmap + delta);
+    dst->num_vmas = src->num_vmas;
+
+    struct vm_area_struct* src_vma = src->mmap;
+    struct vm_area_struct* dst_vma = dst->mmap;
+    while (src_vma != NULL) {
+        dst_vma->vm_mm = dst;
+        dst_vma->vm_start = src_vma->vm_start;
+        dst_vma->vm_end = src_vma->vm_end;
+        dst_vma->vm_flags = src_vma->vm_flags;
+        dst_vma->vm_prev = src_vma->vm_prev == NULL ? NULL : (struct vm_area_struct*)((uint64_t)src_vma->vm_prev + delta);
+        dst_vma->vm_next = src_vma->vm_next == NULL ? NULL : (struct vm_area_struct*)((uint64_t)src_vma->vm_next + delta);
+        src_vma = src_vma->vm_next;
+        dst_vma = dst_vma->vm_next;
+    }
+    return dst;
+}
+
+long do_fork(struct pt_regs* regs) {
+    printk("do_fork: %" PRIu64 " -> %" PRIu64 "\n", current->pid, num_tasks);
+    uint64_t child_pid = num_tasks++;
+
+    task[child_pid] = (struct task_struct*)alloc_page();
+    memcpy(task[child_pid], current, PGSIZE);
+    task[child_pid]->pid = child_pid;
+    task[child_pid]->state = TASK_RUNNING;
+    task[child_pid]->priority = randint(PRIORITY_MIN, PRIORITY_MAX);
+    task[child_pid]->counter = 0;
+
+    uint64_t delta = (uint64_t)task[child_pid] - (uint64_t)current;
+    task[child_pid]->thread.ra = (uint64_t)&ret_from_fork;
+    task[child_pid]->thread.sp = (uint64_t)regs + delta;
+    task[child_pid]->thread.sepc = regs->sepc;
+    task[child_pid]->thread.stval = 0;
+    task[child_pid]->thread.scause = 0;
+
+    task[child_pid]->mm = (struct mm_struct*)alloc_page();
+    copy_mm(task[child_pid]->mm, current->mm);
+
+    task[child_pid]->pgd = (pagetable_t)alloc_page();
+    copy_mapping(task[child_pid]->pgd, swapper_pg_dir);
+    struct vm_area_struct* vma = current->mm->mmap;
+    while (vma != NULL) {
+        uint64_t start_page_va = PGROUNDDOWN((uint64_t)vma->vm_start);
+        uint64_t end_page_va = PGROUNDUP((uint64_t)vma->vm_end);
+        for (uint64_t page_va = start_page_va; page_va < end_page_va; page_va += PGSIZE) {
+            uint64_t page_vpn = page_va >> PAGE_SHIFT;
+            uint64_t* pte_ptr = walk_page_table_pte(current->pgd, page_vpn);
+
+            if (is_valid_pte(pte_ptr)) {
+                uint64_t page_ppn = GET_SUBBITMAP(*pte_ptr, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END);
+                uint64_t page_pa = page_ppn << PAGE_SHIFT;
+
+                ref_page((void*)PA2VA(page_pa));
+                *pte_ptr |= SV39_PTE_S;
+                *pte_ptr &= ~SV39_PTE_W;
+                create_mapping(task[child_pid]->pgd, (void*)page_va, (void*)page_pa, PGSIZE, SV39_GET_PERM(*pte_ptr));
+            }
+        }
+        vma = vma->vm_next;
+    }
+    asm volatile("sfence.vma" ::: "memory");
+
+    
+    struct pt_regs* child_regs = (struct pt_regs*)((uint64_t)regs + delta);
+    child_regs->x[RISCV_REG_A0] = 0;
+    return child_pid;
 }

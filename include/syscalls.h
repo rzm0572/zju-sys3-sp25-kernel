@@ -6,5 +6,6 @@
 #define __NR_write 64
 #define __NR_clock_gettime 113
 #define __NR_getpid 172
+#define __NR_clone 220
 
 #endif

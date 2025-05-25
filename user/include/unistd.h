@@ -13,6 +13,7 @@ typedef long ssize_t;
 
 ssize_t write(int fd, const void *buf, size_t count);
 pid_t getpid(void);
+pid_t fork(void);
 int clock_gettime(clockid_t clockid_t, struct timespec *tp);
 
 #endif

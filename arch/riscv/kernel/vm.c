@@ -18,7 +18,6 @@ extern uint8_t _sbss[];
 extern uint8_t _ebss[];
 
 
-#define SV39_PTE(ppn, perm) TRUNCATE(((ppn) << SV39_PTE_PPN_BEGIN | (perm)), SV39_PTE_PPN_END + 1)
 #define PTE_HAS_PERM(pte, perm) ((pte) & SV39_PTE_##perm)
 
 #define GIGAPAGE_SHIFT 18
@@ -65,9 +64,9 @@ void setup_vm_final(void) {
     //    - kernel rodata: R
     //    - other memory: W R
 
-    create_mapping(swapper_pg_dir, _stext, (uint8_t*)VA2PA(_stext), (uint64_t)(_etext - _stext), SV39_PTE_X | SV39_PTE_R);
-    create_mapping(swapper_pg_dir, _srodata, (uint8_t*)VA2PA(_srodata),  (uint64_t)(_erodata - _srodata), SV39_PTE_R);
-    create_mapping(swapper_pg_dir, _sdata, (uint8_t*)VA2PA(_sdata), (uint64_t)_skernel + PHY_SIZE - (uint64_t)_sdata, SV39_PTE_W | SV39_PTE_R);
+    create_mapping(swapper_pg_dir, _stext, (uint8_t*)VA2PA(_stext), (uint64_t)(_etext - _stext), SV39_PTE_X | SV39_PTE_R | SV39_PTE_A);
+    create_mapping(swapper_pg_dir, _srodata, (uint8_t*)VA2PA(_srodata),  (uint64_t)(_erodata - _srodata), SV39_PTE_R | SV39_PTE_A);
+    create_mapping(swapper_pg_dir, _sdata, (uint8_t*)VA2PA(_sdata), (uint64_t)_skernel + PHY_SIZE - (uint64_t)_sdata, SV39_PTE_W | SV39_PTE_R | SV39_PTE_A | SV39_PTE_D);
 
     // 2. 设置 satp，将 swapper_pg_dir 作为内核页表
     uint64_t top_ppn = PHYS2PPN(VA2PA(swapper_pg_dir));
@@ -146,9 +145,41 @@ void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa,
     printk("pgtbl = 0x%" PRIx64 ": map [0x%" PRIx64 ", 0x%" PRIx64 ") -> [0x%" PRIx64 ", 0x%" PRIx64 "), perm = 0x%" PRIx64 ", size=%" PRId64 "\n", (uint64_t)pgtbl, (uint64_t)va, (uint64_t)va + sz, (uint64_t)pa, (uint64_t) pa + sz, perm, sz);
 }
 
-uint64_t* get_physical_address(uint64_t pgtbl[static PGSIZE / 8], uint64_t* va) {
-    uint64_t* va_ptr = (uint64_t*)&va;
-    uint64_t offset = extract_bits(va_ptr, PAGE_SHIFT);
+void copy_mapping(uint64_t dst_pgtbl[static PGSIZE / 8], uint64_t src_pgtbl[static PGSIZE / 8]) {
+    for (uint64_t i = 0; i < PGSIZE / 8; i++) {
+        if (src_pgtbl[i] & SV39_PTE_V) {
+            uint64_t src_ppn_lv2 = SV39_GET_PPN(src_pgtbl[i]);
+            uint64_t *src_pgtbl_lv2 = (uint64_t*)PA2VA(PPN2PHYS(src_ppn_lv2));
+            uint64_t *dst_pgtbl_lv2 = (uint64_t*)alloc_page();
+            uint64_t dst_ppn_lv2 = PHYS2PPN(VA2PA(dst_pgtbl_lv2));
+            dst_pgtbl[i] = SV39_PTE(dst_ppn_lv2, SV39_GET_PERM(src_pgtbl[i]));
+            
+            for (uint64_t j = 0; j < PGSIZE / 8; j++) {
+                if (src_pgtbl_lv2[j] & SV39_PTE_V) {
+                    uint64_t src_ppn_lv3 = SV39_GET_PPN(src_pgtbl_lv2[j]);
+                    uint64_t *src_pgtbl_lv3 = (uint64_t*)PA2VA(PPN2PHYS(src_ppn_lv3));
+                    uint64_t *dst_pgtbl_lv3 = (uint64_t*)alloc_page();
+                    uint64_t dst_ppn_lv3 = PHYS2PPN(VA2PA(dst_pgtbl_lv3));
+                    dst_pgtbl_lv2[j] = SV39_PTE(dst_ppn_lv3, SV39_GET_PERM(src_pgtbl_lv2[j]));
+                    memcpy(dst_pgtbl_lv3, src_pgtbl_lv3, PGSIZE);
+                }
+            }
+        }
+    }
+}
+
+int is_valid_pte(uint64_t* pte_ptr) {
+    if (pte_ptr == INVALID_PA) {
+        return 0;
+    }
+    if (!(*pte_ptr & SV39_PTE_V)) {
+        return 0;
+    }
+    return 1;
+}
+
+uint64_t* walk_page_table_pte(uint64_t pgtbl[static PGSIZE / 8], uint64_t _vpn) {
+    uint64_t* va_ptr = (uint64_t*)&_vpn;
     uint64_t vpn[3] = {
         extract_bits(va_ptr, SV39_VPN_LEN),
         extract_bits(va_ptr, SV39_VPN_LEN),
@@ -158,11 +189,26 @@ uint64_t* get_physical_address(uint64_t pgtbl[static PGSIZE / 8], uint64_t* va) 
     uint64_t* page_table = (uint64_t*)pgtbl;
     for (int i = 2; i >= 1; i--) {
         uint64_t pte = page_table[vpn[i]];
+        if (!(pte & SV39_PTE_V)) {
+            return INVALID_PA;
+        }
         uint64_t ppn = GET_SUBBITMAP(pte, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END);
         page_table = (uint64_t*)PA2VA(PPN2PHYS(ppn));
     }
 
-    uint64_t pte = page_table[vpn[0]];
+    return &page_table[vpn[0]];
+}
+
+uint64_t* walk_page_table(uint64_t pgtbl[static PGSIZE / 8], uint64_t* va) {
+    uint64_t* va_ptr = (uint64_t*)&va;
+    uint64_t offset = extract_bits(va_ptr, PAGE_SHIFT);
+    uint64_t* pte_ptr = walk_page_table_pte(pgtbl, (uint64_t)va);
+    
+    if (!is_valid_pte(pte_ptr)) {
+        return INVALID_PA;
+    }
+
+    uint64_t pte = *pte_ptr;
     uint64_t ppn = GET_SUBBITMAP(pte, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END);
     return (uint64_t*)((ppn << PAGE_SHIFT) + offset);
 }

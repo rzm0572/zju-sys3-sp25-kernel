@@ -17,7 +17,7 @@ static int printk_sbi_write(FILE *restrict fp, const void *restrict buf, size_t 
 
     unsigned long buf_pa = VA2PA(buf);
     if ((uint64_t)buf < USER_END) {
-        buf_pa = (unsigned long)get_physical_address((uint64_t*)current->pgd, (uint64_t*)buf);
+        buf_pa = (unsigned long)walk_page_table((uint64_t*)current->pgd, (uint64_t*)buf);
     }
 
     struct sbiret ret = sbi_ecall(EID(DEBUG_CONSOLE), FID(DEBUG_CONSOLE, WRITE), (unsigned long)len, buf_pa, 0, 0, 0, 0);

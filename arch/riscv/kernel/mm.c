@@ -1,16 +1,18 @@
 #include "private_kdefs.h"
 #include <mm.h>
-
-#ifdef ONBOARD
-
 #include <stdint.h>
 #include <printk.h>
+#include <string.h>
+
+#ifdef ONBOARD
 
 extern uint8_t _ekernel[];
 
 static struct kfreelist {
   struct kfreelist *next;
 } *kfreelist;
+
+static uint32_t* ref_cnt;
 
 void *alloc_page(void) {
   struct kfreelist *r = kfreelist;
@@ -40,16 +42,47 @@ void mm_init(void) {
   for (uint8_t *p = (uint8_t*)e - PGSIZE; p >= s; p -= PGSIZE) {
     free_pages(p);
   }
+
+  // Init ref_cnt
+  uint64_t ref_cnt_size = ((uint64_t)PHY_SIZE >> PAGE_SHIFT) * sizeof(uint32_t);
+  ref_cnt = (uint32_t*)alloc_pages(ref_cnt_size >> PAGE_SHIFT);
+  memset(ref_cnt, 0, ref_cnt_size);
+}
+
+int ref_page(void *va) {
+  uint64_t pfn = PHYS2PFN(VA2PA(va));
+  if (ref_cnt[pfn] == 0) {
+    return -1;
+  }
+  ref_cnt[pfn]++;
+  return 0;
+}
+
+int deref_page(void *va) {
+  uint64_t pfn = PHYS2PFN(VA2PA(va));
+  if (ref_cnt[pfn] == 0) {
+    return -1;
+  }
+  ref_cnt[pfn]--;
+  return 0;
+}
+
+uint64_t get_ref_cnt(void *pa) {
+  uint64_t pfn = PHYS2PFN(pa);
+  return ref_cnt[pfn];
 }
 
 #else
 
 #include <mm.h>
+#include <vm.h>
 #include <string.h>
 #include <printk.h>
 #include <sbi.h>
+#include <proc.h>
 
 extern uint8_t _ekernel[];
+extern struct task_struct* current;
 
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
@@ -234,6 +267,11 @@ int deref_page(void *va) {
   }
   buddy_pfn_decref(pfn);
   return 0;
+}
+
+uint64_t get_ref_cnt(void *pa) {
+  uint64_t pfn = PHYS2PFN(pa);
+  return buddy.ref_cnt[pfn];
 }
 
 void mm_init(void) __attribute__((alias("buddy_init")));

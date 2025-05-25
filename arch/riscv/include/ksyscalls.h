@@ -6,8 +6,11 @@
 #include <syscalls.h>
 #include <time.h>
 
+struct pt_regs;
+
 long sys_write(unsigned fd, const char *buf, size_t count);
 long sys_getpid(void);
+long sys_clone(struct pt_regs *regs);
 long sys_clock_gettime(clockid_t clock_id, struct timespec *tp);
 
 typedef long (*syscall_handler_t)();
