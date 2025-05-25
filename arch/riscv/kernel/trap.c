@@ -145,8 +145,8 @@ void do_page_fault(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
     } else {
         uint64_t *pa = (uint64_t*)(GET_SUBBITMAP(*pte_ptr, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END) << PAGE_SHIFT);
         if (scause == SCAUSE_STORE_PAGE_FAULT && (*pte_ptr & SV39_PTE_S)) {
-            uint64_t ref_cnt = get_ref_cnt(pa);
-            if (ref_cnt >= 2) {
+            uint64_t rcnt = get_ref_cnt(pa);
+            if (rcnt >= 2) {
                 memcpy(new_page, va_rounddown, PGSIZE);
                 deref_page((void*)PA2VA(pa));
 
@@ -156,7 +156,7 @@ void do_page_fault(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
                 asm volatile("sfence.vma" : : : "memory");
 
                 printk("vma = 0x%" PRIx64 ", SHARED PAGE [PID = %" PRIu64 "], copy 0x%" PRIx64 " to 0x%" PRIx64 "\n", (uint64_t)vma, current->pid, (uint64_t)pa, (uint64_t)VA2PA(new_page));
-            } else if (ref_cnt == 1) {
+            } else if (rcnt == 1) {
                 *pte_ptr &= ~SV39_PTE_S;
                 if (vma->vm_flags & VM_WRITE) {
                     *pte_ptr |= SV39_PTE_W;

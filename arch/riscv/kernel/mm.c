@@ -16,6 +16,7 @@ static uint32_t* ref_cnt;
 
 void *alloc_page(void) {
   struct kfreelist *r = kfreelist;
+  ref_cnt[PHYS2PFN(VA2PA(kfreelist))] = 1;
   kfreelist = r->next;
   return r;
 }
@@ -24,6 +25,7 @@ void *alloc_page(void) {
 void *alloc_pages(size_t nrpages) {
   struct kfreelist *r = kfreelist;
   for (size_t i = 0; i < nrpages; i++) {
+    ref_cnt[PHYS2PFN(VA2PA(kfreelist))] = 1;
     kfreelist = kfreelist->next;
   }
   return r;
@@ -44,8 +46,11 @@ void mm_init(void) {
   }
 
   // Init ref_cnt
-  uint64_t ref_cnt_size = ((uint64_t)PHY_SIZE >> PAGE_SHIFT) * sizeof(uint32_t);
-  ref_cnt = (uint32_t*)alloc_pages(ref_cnt_size >> PAGE_SHIFT);
+  size_t ref_cnt_size = ((uint64_t)PHY_SIZE >> PAGE_SHIFT) * sizeof(uint32_t);
+  ref_cnt = (uint32_t*)kfreelist;
+  for (size_t i = 0; i < (ref_cnt_size >> PAGE_SHIFT); i++) {
+    kfreelist = kfreelist->next;
+  }
   memset(ref_cnt, 0, ref_cnt_size);
 }
 
