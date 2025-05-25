@@ -1,2 +1,2 @@
     .section .uapp
-    .incbin "uapp.elf"
+    .incbin "uapp.bin"

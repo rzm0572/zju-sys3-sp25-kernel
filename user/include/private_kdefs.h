@@ -1,7 +1,7 @@
 #ifndef _PRIVATE_KDEFS_H_
 #define _PRIVATE_KDEFS_H_
 
-#define ONBOARD
+// #define ONBOARD
 
 #ifdef ONBOARD
     #define TIMECLOCK 800000
