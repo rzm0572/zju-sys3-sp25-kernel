@@ -47,4 +47,6 @@ void setup_vm_final(void);
  */
 void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa, uint64_t sz, uint64_t perm);
 
+uint64_t* get_physical_address(uint64_t pgtbl[static PGSIZE / 8], uint64_t* va);
+
 #endif

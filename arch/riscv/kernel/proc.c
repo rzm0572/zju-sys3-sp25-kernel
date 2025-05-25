@@ -1,12 +1,19 @@
+#include <vm.h>
 #include <mm.h>
 #include <proc.h>
 #include <printk.h>
 #include <stdlib.h>
+#include <string.h>
 #include <private_kdefs.h>
+#include <csr.h>
 
 static struct task_struct *task[NR_TASKS]; // 线程数组，所有的线程都保存在此
 static struct task_struct *idle;           // idle 线程
 struct task_struct *current;               // 当前运行线程
+
+extern uint64_t swapper_pg_dir[PGSIZE / 8] __attribute__((__aligned__(PGSIZE)));
+extern uint8_t _suapp[];
+extern uint8_t _euapp[];
 
 void __dummy(void);
 void __switch_to(struct task_struct *prev, struct task_struct *next);
@@ -50,6 +57,38 @@ void task_init(void) {
 
         task[i]->thread.ra = (uint64_t)&__dummy;
         task[i]->thread.sp = (uint64_t)task[i] + PGSIZE;
+        
+        task[i]->thread.sepc = USER_START;
+        
+        // set spp = 1'b0
+        csr_set_bit(task[i]->thread.sstatus, CSR_SSTATUS_SPP, 0);
+        // set sum = 1'b1
+        csr_set_bit(task[i]->thread.sstatus, CSR_SSTATUS_SUM, 1);
+        // set uxl = 2'b10
+        csr_set_bit(task[i]->thread.sstatus, CSR_SSTATUS_UXL, 0);
+        csr_set_bit(task[i]->thread.sstatus, CSR_SSTATUS_UXL + 1, 1);
+        
+        
+
+        task[i]->thread.sscratch = USER_END;
+        task[i]->thread.stval = 0;
+        task[i]->thread.scause = 0;
+
+        // set pre-thread page table
+        task[i]->pgd = (pagetable_t)alloc_page();   // VA
+        memcpy(task[i]->pgd, swapper_pg_dir, PGSIZE);
+
+        // set user stack
+        uint64_t* user_stack = (uint64_t*)alloc_page();
+        create_mapping(task[i]->pgd, (uint64_t*)(USER_END - PGSIZE), (uint64_t*)VA2PA(user_stack), PGSIZE, SV39_PTE_R | SV39_PTE_W | SV39_PTE_U);
+
+        // set user program
+        uint64_t uapp_begin_page = (uint64_t)_suapp >> PAGE_SHIFT;
+        uint64_t uapp_end_page = ((uint64_t)_euapp - 1) >> PAGE_SHIFT;
+        uint64_t uapp_pages = uapp_end_page - uapp_begin_page + 1;
+        uint64_t* uapp = (uint64_t*)alloc_pages(uapp_pages);
+        memcpy(uapp, (uint64_t*)(uapp_begin_page << PAGE_SHIFT), uapp_pages << PAGE_SHIFT);
+        create_mapping(task[i]->pgd, (uint64_t*)USER_START, (uint64_t*)VA2PA(uapp), uapp_pages << PAGE_SHIFT, SV39_PTE_R | SV39_PTE_W | SV39_PTE_X | SV39_PTE_U);
     }
 
     printk("...task_init done!\n");
@@ -66,7 +105,7 @@ void dummy_task(void) {
             prev_cnt = current->counter;
 
 #ifdef ONBOARD
-            printk("[P=%" PRIu64 "] %" PRIu64 "\n", current->pid, ++local);
+            printk("[P=%" PRIu64 "] %" PRIu32 "\n", current->pid, ++local);
 #else
             printk("[PID = %" PRIu64 " @ 0x%" PRIx64 "] Running. local = %" PRIu32 ", counter = %" PRIu64 "\n", current->pid, current->thread.sp, ++local, current->counter);
 #endif

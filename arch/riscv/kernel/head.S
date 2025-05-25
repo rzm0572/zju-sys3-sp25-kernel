@@ -48,9 +48,6 @@ _start:
     
     call sbi_ecall
 
-    # 6. 设置 sstatus[SIE]
-    csrrsi x0, sstatus, 0x2
-
     # 7. 跳转到 start_kernel
     j start_kernel
 

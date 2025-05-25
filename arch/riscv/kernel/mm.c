@@ -1,3 +1,4 @@
+#include "private_kdefs.h"
 #include <mm.h>
 
 #ifdef ONBOARD
@@ -17,6 +18,15 @@ void *alloc_page(void) {
   return r;
 }
 
+// Warning: this function does not garantee the allocated pages are continuous.
+void *alloc_pages(size_t nrpages) {
+  struct kfreelist *r = kfreelist;
+  for (size_t i = 0; i < nrpages; i++) {
+    kfreelist = kfreelist->next;
+  }
+  return r;
+}
+
 void free_pages(void *addr) {
   struct kfreelist *r = (void *)PGROUNDDOWN((uintptr_t)addr);
   r->next = kfreelist;
@@ -24,10 +34,11 @@ void free_pages(void *addr) {
 }
 
 void mm_init(void) {
+  kfreelist = INVALID_PA;
   uint8_t *s = (void *)PGROUNDUP((uintptr_t)_ekernel);
   const uint8_t *e = (void *)(PHY_END + PA2VA_OFFSET);
-  for (; s + PGSIZE <= e; s += PGSIZE) {
-    free_pages(s);
+  for (uint8_t *p = (uint8_t*)e - PGSIZE; p >= s; p -= PGSIZE) {
+    free_pages(p);
   }
 }
 

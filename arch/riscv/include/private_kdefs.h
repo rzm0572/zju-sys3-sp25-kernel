@@ -4,7 +4,7 @@
 #define ONBOARD
 
 #ifdef ONBOARD
-    #define TIMECLOCK 200000
+    #define TIMECLOCK 800000
 #else
     // QEMU virt 机器的时钟频率为 10 MHz
     #define TIMECLOCK 10000000
@@ -26,6 +26,9 @@
 
 #define PA2VA_OFFSET (VM_START - PHY_START)
 
+#define USER_START 0x0
+#define USER_END   0x4000000000
+
 #define PGSIZE 0x1000
 #define PGROUNDDOWN(addr) ((addr) & ~(PGSIZE - 1))
 #define PGROUNDUP(addr) PGROUNDDOWN((addr) + PGSIZE - 1)
@@ -33,5 +36,6 @@
 #define SATP_MODE 0x8000000000000000
 #define PAGE_SHIFT 12
 
+#define INVALID_PA (void*)0xdeadbeef
 
 #endif

@@ -4,6 +4,7 @@
 #include <private_kdefs.h>
 #include <stdint.h>
 #include <string.h>
+#include <csr.h>
 
 extern uint8_t _stext[];
 extern uint8_t _etext[];
@@ -70,7 +71,7 @@ void setup_vm_final(void) {
 
     // 2. 设置 satp，将 swapper_pg_dir 作为内核页表
     uint64_t top_ppn = PHYS2PPN(VA2PA(swapper_pg_dir));
-    asm volatile("csrw satp, %0" :: "r" (top_ppn | SATP_MODE) : "memory");
+    csr_write(satp, top_ppn | SATP_MODE);
 
     // flush TLB
     asm volatile("sfence.vma" ::: "memory");
@@ -116,13 +117,7 @@ void create_mapping_page(uint64_t pgtbl[static PGSIZE / 8], uint64_t _vpn, uint6
 
 void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa,
                     uint64_t sz, uint64_t perm) {
-    // TODO：根据 RISC-V Sv39 的要求，创建多级页表映射关系
-    //
-    // 物理内存需要分页
-    // 创建多级页表的时候使用 alloc_page 来获取新的一页作为页表
-    // 注意通过 V bit 来判断表项是否存在
-    //
-    // 重要：阅读手册，注意 A / D 位的设置
+    // TODO：将 create_mapping 改写成三层嵌套循环的方式，以提升效率
 
     uint64_t vpn_low = (uint64_t)va >> PAGE_SHIFT;
     uint64_t vpn_high = ((uint64_t)va + sz - 1) >> PAGE_SHIFT;
@@ -133,4 +128,25 @@ void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa,
     }
 
     printk("pgtbl = 0x%" PRIx64 ": map [0x%" PRIx64 ", 0x%" PRIx64 ") -> [0x%" PRIx64 ", 0x%" PRIx64 "), perm = 0x%" PRIx64 ", size=%" PRId64 "\n", (uint64_t)pgtbl, (uint64_t)va, (uint64_t)va + sz, (uint64_t)pa, (uint64_t) pa + sz, perm, sz);
+}
+
+uint64_t* get_physical_address(uint64_t pgtbl[static PGSIZE / 8], uint64_t* va) {
+    uint64_t* va_ptr = (uint64_t*)&va;
+    uint64_t offset = extract_bits(va_ptr, PAGE_SHIFT);
+    uint64_t vpn[3] = {
+        extract_bits(va_ptr, SV39_VPN_LEN),
+        extract_bits(va_ptr, SV39_VPN_LEN),
+        extract_bits(va_ptr, SV39_VPN_LEN)
+    };
+
+    uint64_t* page_table = (uint64_t*)pgtbl;
+    for (int i = 2; i >= 1; i--) {
+        uint64_t pte = page_table[vpn[i]];
+        uint64_t ppn = GET_SUBBITMAP(pte, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END);
+        page_table = (uint64_t*)PA2VA(PPN2PHYS(ppn));
+    }
+
+    uint64_t pte = page_table[vpn[0]];
+    uint64_t ppn = GET_SUBBITMAP(pte, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END);
+    return (uint64_t*)((ppn << PAGE_SHIFT) + offset);
 }

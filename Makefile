@@ -1,4 +1,5 @@
-CROSS_ := riscv64-linux-gnu-
+# CROSS_ := riscv64-linux-gnu-
+CROSS_ := riscv64-unknown-linux-gnu-
 export GCC := $(CROSS_)gcc
 export LD := $(CROSS_)ld
 export OBJCOPY := $(CROSS_)objcopy
@@ -19,8 +20,9 @@ export LDFLAGS := -lgcc -Wl,--nmagic -Wl,--gc-sections
 
 all:
 	$(MAKE) -C lib all
+	$(MAKE) -C user all
 	$(MAKE) -C arch/riscv all
-	$(LD) -T arch/riscv/kernel/vmlinux.lds arch/riscv/kernel/*.o lib/*.o -o vmlinux
+	$(LD) -T arch/riscv/kernel/vmlinux.lds user/uapp.o arch/riscv/kernel/*.o lib/*.o -o vmlinux
 	mkdir -p arch/riscv/boot
 	$(OBJCOPY) -O binary vmlinux arch/riscv/boot/Image
 	$(OBJDUMP) -S vmlinux > vmlinux.asm
@@ -55,6 +57,7 @@ spike_bridge:
 
 clean:
 	$(MAKE) -C lib clean
+	$(MAKE) -C user clean
 	$(MAKE) -C arch/riscv clean
 	$(MAKE) -C "$(SNPRINTF_TEST_DIR)" -f "$(SNPRINTF_MAKEFILE)" clean
 	rm -rf vmlinux vmlinux.asm snprintf_test System.map arch/riscv/boot

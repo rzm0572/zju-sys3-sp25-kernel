@@ -1,0 +1,49 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <inttypes.h>
+#include <unistd.h>
+#include <time.h>
+#include <private_kdefs.h>
+
+#define TIME_GAP (TIMECLOCK / 10)
+
+#define TIME_GAP_HALF (TIME_GAP / 2)
+
+// TODO for you:
+// try to implement the C library function clock() so that it can be
+// used across the kernel and user space, be DRY :)
+static uint64_t user_clock(void) {
+  return (uint64_t)clock() / 10;
+}
+
+// IMPORTANT: DO NOT move global variables into main function
+int i;
+uint64_t prev_clock;
+
+int main(void) {
+  register const void *const sp asm("sp");
+
+  // lets just wait some time
+  prev_clock = user_clock();
+  while (user_clock() - prev_clock < TIME_GAP_HALF)
+    ;
+
+  while (1) {
+#ifdef ONBOARD
+    printf("\x1b[44m[U]\x1b[0m [PID = %d]\n", getpid());
+    i++;
+#else
+    printf("\x1b[44m[U]\x1b[0m [PID = %d, sp = %p] i = %d @ %" PRIu64 "\n", getpid(), sp, ++i, prev_clock);
+#endif
+
+    // another interesting question for you to think about:
+    // why when the tasks are scheduled the second time,
+    // all tasks just suddenly "lined up" with the timer interrupt?
+    prev_clock = user_clock();
+    // printf("prev_clock = %ld\n", prev_clock);
+    while (user_clock() - prev_clock < TIME_GAP)
+      ;
+    // printf("user_clock() - prev_clock = %ld\n", user_clock() - prev_clock);
+  }
+}
