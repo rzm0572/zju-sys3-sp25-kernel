@@ -9,7 +9,7 @@ export NM := $(CROSS_)nm
 ISA := rv64ia_zicsr_zifencei
 ABI := lp64
 
-export CPPFLAGS := -I$(CURDIR)/include
+export CPPFLAGS := -I$(CURDIR)/include -I$(CURDIR)/arch/riscv/include
 export CFLAGS := -march=$(ISA) -mabi=$(ABI) -mcmodel=medany \
 	-ffreestanding -fno-builtin -ffunction-sections -fdata-sections \
 	-nostartfiles -nostdlib -nostdinc -static -ggdb -Og \
@@ -19,10 +19,11 @@ export LDFLAGS := -lgcc -Wl,--nmagic -Wl,--gc-sections
 .PHONY: all run debug snprintf clean spike_run spike_debug spike_bridge
 
 all:
+	$(MAKE) -C fs all
 	$(MAKE) -C lib all
 	$(MAKE) -C user all
 	$(MAKE) -C arch/riscv all
-	$(LD) -T arch/riscv/kernel/vmlinux.lds user/uapp.o arch/riscv/kernel/*.o lib/*.o -o vmlinux
+	$(LD) -T arch/riscv/kernel/vmlinux.lds user/uapp.o arch/riscv/kernel/*.o lib/*.o fs/*.o -o vmlinux
 	mkdir -p arch/riscv/boot
 	$(OBJCOPY) -O binary vmlinux arch/riscv/boot/Image
 	$(OBJDUMP) -S vmlinux > vmlinux.asm
@@ -33,11 +34,17 @@ SPIKE_CONF := $(realpath $(CURDIR)/../../../repo/sys-project/spike)
 
 run: all
 	# Launch the qemu ......
-	qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios $(SPIKE_CONF)/fw_jump.bin 
+	qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios $(SPIKE_CONF)/fw_jump.bin \
+        -global virtio-mmio.force-legacy=false \
+        -drive file=disk.img,if=none,format=raw,id=hd0 \
+        -device virtio-blk-device,drive=hd0
 
 debug: all
 	# Launch the qemu for debug ......
-	qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios $(SPIKE_CONF)/fw_jump.bin -S -s
+	qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios $(SPIKE_CONF)/fw_jump.bin \
+        -global virtio-mmio.force-legacy=false \
+        -drive file=disk.img,if=none,format=raw,id=hd0 \
+        -device virtio-blk-device,drive=hd0 -S -s
 
 SNPRINTF_TEST_DIR := $(realpath $(CURDIR)/../../../repo/sys-project/testcode/snprintf)
 SNPRINTF_MAKEFILE := $(CURDIR)/lib/Makefile
@@ -56,6 +63,7 @@ spike_bridge:
 	openocd -f $(SPIKE_CONF)/spike.cfg
 
 clean:
+	$(MAKE) -C fs clean
 	$(MAKE) -C lib clean
 	$(MAKE) -C user clean
 	$(MAKE) -C arch/riscv clean

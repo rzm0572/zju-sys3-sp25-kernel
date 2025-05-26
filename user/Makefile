@@ -4,7 +4,6 @@ CPPFLAGS += -I$(CURDIR)/include -DUSER_MAIN=$(T)
 C_SRC := $(wildcard src/*.c) $(wildcard ../lib/*.c)
 ASM_SRC := $(wildcard src/*.S) $(wildcard ../lib/*.S)
 OBJ := $(C_SRC:.c=.o) $(ASM_SRC:.S=.o)
-
 .PHONY: all clean
 
 all:

@@ -42,6 +42,33 @@ void ecall_from_user_mode_handler(struct pt_regs *regs, uint64_t scause, uint64_
 
     uint64_t ret = 0;
     switch (syscall_nr) {
+        case __NR_open: {
+            ret = sys_open(
+                (const char*)regs->x[RISCV_REG_A0],
+                (int)regs->x[RISCV_REG_A1]
+            );
+            break;
+        }
+        case __NR_close: {
+            ret = sys_close((int)regs->x[RISCV_REG_A0]);
+            break;
+        }
+        case __NR_lseek: {
+            ret = sys_lseek(
+                (int)regs->x[RISCV_REG_A0],
+                (long)regs->x[RISCV_REG_A1],
+                (int)regs->x[RISCV_REG_A2]
+            );
+            break;
+        }
+        case __NR_read: {
+            ret = sys_read(
+                (unsigned int)regs->x[RISCV_REG_A0],
+                (char*)regs->x[RISCV_REG_A1],
+                (size_t)regs->x[RISCV_REG_A2]
+            );
+            break;
+        }
         case __NR_write: {
             ret = sys_write(
                 (unsigned int)regs->x[RISCV_REG_A0],

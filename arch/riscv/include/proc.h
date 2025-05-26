@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <fs.h>
 
 #define TASK_RUNNING 0 // 为了简化实验，所有的线程都只有一种状态
 
@@ -46,6 +47,8 @@ struct task_struct {
   pagetable_t pgd;   // 页表
 
   struct mm_struct *mm;
+
+  struct files_struct *files;
 };
 
 // VMA

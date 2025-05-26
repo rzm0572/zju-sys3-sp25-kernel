@@ -115,7 +115,7 @@ int scanf_core(FILE *f, const char *fmt, va_list *ap, union arg *nl_arg, int *nl
     }
     return matched;
 }
-int vfscanf(FILE *f, const char *fmt, va_list ap) {
+int vfscanf(FILE *restrict f, const char *restrict fmt, va_list ap) {
     int nl_type[NL_ARGMAX + 1] = {0};
     union arg nl_arg[NL_ARGMAX + 1];
     return scanf_core(f, fmt, &ap, nl_arg, nl_type);

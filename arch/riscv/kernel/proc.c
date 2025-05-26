@@ -8,6 +8,7 @@
 #include <private_kdefs.h>
 #include <csr.h>
 #include <elf.h>
+#include <fs.h>
 
 static struct task_struct *task[NR_TASKS]; // 线程数组，所有的线程都保存在此
 static struct task_struct *idle;           // idle 线程
@@ -115,6 +116,7 @@ void task_init(void) {
             load_program(task[i]);
         }
         do_mmap(mm, (void*)(USER_END - PGSIZE), (size_t)PGSIZE, VM_READ | VM_WRITE | VM_ANON, 0, 0);
+        task[i]->files = file_init();
     }
 
     for (uint64_t i = num_tasks; i < NR_TASKS; i++) {
@@ -178,7 +180,7 @@ void schedule(void) {
 #ifdef ONBOARD
             printk("SET [P=%" PRIu64 "]\n", i);
 #else
-            printk("SET [PID = %" PRIu64 ", PRIORITY = %" PRIu64 ", COUNTER = %" PRIu64 "]\n", i, task[i]->priority, task[i]->counter);
+            ;// printk("SET [PID = %" PRIu64 ", PRIORITY = %" PRIu64 ", COUNTER = %" PRIu64 "]\n", i, task[i]->priority, task[i]->counter);
 #endif      
         }
         max_cnt_pid = get_max_cnt_pid();

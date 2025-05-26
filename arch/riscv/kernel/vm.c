@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <csr.h>
+#include <virtio.h>
 
 extern uint8_t _stext[];
 extern uint8_t _etext[];
@@ -67,6 +68,7 @@ void setup_vm_final(void) {
     create_mapping(swapper_pg_dir, _stext, (uint8_t*)VA2PA(_stext), (uint64_t)(_etext - _stext), SV39_PTE_X | SV39_PTE_R | SV39_PTE_A);
     create_mapping(swapper_pg_dir, _srodata, (uint8_t*)VA2PA(_srodata),  (uint64_t)(_erodata - _srodata), SV39_PTE_R | SV39_PTE_A);
     create_mapping(swapper_pg_dir, _sdata, (uint8_t*)VA2PA(_sdata), (uint64_t)_skernel + PHY_SIZE - (uint64_t)_sdata, SV39_PTE_W | SV39_PTE_R | SV39_PTE_A | SV39_PTE_D);
+    create_mapping(swapper_pg_dir, (void *)io_to_virt(VIRTIO_START), (void *)VIRTIO_START, VIRTIO_SIZE * VIRTIO_COUNT, SV39_PTE_W | SV39_PTE_R | SV39_PTE_V);
 
     // 2. 设置 satp，将 swapper_pg_dir 作为内核页表
     uint64_t top_ppn = PHYS2PPN(VA2PA(swapper_pg_dir));

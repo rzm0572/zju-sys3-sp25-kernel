@@ -1,5 +1,6 @@
 #include <printk.h>
 #include <scank.h>
+#include <scank.h>
 #include <sbi.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -9,7 +10,7 @@
 
 extern struct task_struct* current;
 extern int scank_sbi_read(FILE *restrict fp, void *restrict buf, size_t len);
-static int printk_sbi_write(FILE *restrict fp, const void *restrict buf, size_t len) {
+int printk_sbi_write(FILE *restrict fp, const void *restrict buf, size_t len) {
     (void)fp;
 
     // 调用 SBI 接口输出 buf 中长度为 len 的内容
@@ -29,7 +30,7 @@ static int printk_sbi_write(FILE *restrict fp, const void *restrict buf, size_t 
 FILE __iob[3] = {
     {.fd = 0, .read = scank_sbi_read},
     {.fd = 1, .write = printk_sbi_write},
-    {}
+    {.fd = 2, .write = printk_sbi_write}
 };
 
 

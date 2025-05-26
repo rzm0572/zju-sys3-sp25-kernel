@@ -19,6 +19,9 @@ _start:
     # 2. 初始化线程
     call task_init
 
+    call virtio_dev_init
+    call mbr_init
+
     # 3. 将 stvec 设置为 _traps
     la t0, _traps
     # la t0, schedule
