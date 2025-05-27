@@ -36,7 +36,8 @@ static uint64_t user_clock(void) {
 
 static void delay(unsigned long ms) {
   uint64_t prev_clock = user_clock();
-  while (user_clock() - prev_clock < ms * 1000)
+  uint64_t time_gap = (ms * 1000) * TIMECLOCK / 10000000;
+  while (user_clock() - prev_clock < time_gap)
     ;
 }
 
@@ -91,7 +92,7 @@ int var = 0;
 char space[0x2000] __attribute__((align(0x1000)));
 
 int main(void) {
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 1; i++) {
     printf("\x1b[44m[U]\x1b[0m [PID = %d] var = %d\n", getpid(), var++);
     delay(DELAY_TIME);
   }
