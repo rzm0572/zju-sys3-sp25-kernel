@@ -390,7 +390,6 @@ int main() {
 
 int main() {
   int N = 8178;
-  heap_init();
   printf("malloc %d bytes\n", N * sizeof(int));
   int *a = (int*)malloc(N * sizeof(int));
   for (int i = 0; i < N; i++) {
