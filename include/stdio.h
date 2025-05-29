@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdarg.h>
 
+typedef long off_t;
+
 typedef struct FILE {
   unsigned fd;
   int (*read)(struct FILE *, void *, size_t);

@@ -5,6 +5,7 @@
 #include <fat32.h>
 #include <fs.h>
 #include <printk.h>
+#include <mman.h>
 
 extern struct task_struct *current;
 extern uint64_t num_tasks;
@@ -123,4 +124,13 @@ long sys_getpid(void) {
 
 long sys_clone(struct pt_regs *regs) {
     return do_fork(regs);
+}
+
+long sys_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset) {
+    if (flags & MAP_ANONYMOUS) {
+        return (long)do_mmap(current->mm, addr, len, to_vm_flags(prot, flags), NULL, 0, 0);
+    } else {  // TODO: not support yets
+        struct file *file = &current->files->fd_array[fd];
+        return (long)do_mmap(current->mm, addr, len, to_vm_flags(prot, flags), file, offset, len);
+    }
 }

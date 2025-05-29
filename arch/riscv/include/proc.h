@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <fs.h>
+#include <mman.h>
 
 #define TASK_RUNNING 0 // 为了简化实验，所有的线程都只有一种状态
 
@@ -85,6 +86,11 @@ struct vm_area_struct {
   struct vm_area_struct *vm_next;
 
   /**
+   * @brief The file we map to (if any)
+   */
+  struct file *vm_file;
+
+  /**
    * @brief Offset of the area in the file (if any)
    */
   uint64_t vm_pgoff;
@@ -157,8 +163,10 @@ struct vm_area_struct *find_vma(struct mm_struct *mm, void *va);
  *
  * @return 该映射的起始地址
  */
-void *do_mmap(struct mm_struct *mm, void *va, size_t len, unsigned flags, uint64_t pgoff, uint64_t filesz);
+void *do_mmap(struct mm_struct *mm, void *va, size_t len, unsigned flags, struct file *file, uint64_t pgoff, uint64_t filesz);
 
 long do_fork(struct pt_regs *regs);
+
+unsigned int to_vm_flags(int prot, int flags);
 
 #endif

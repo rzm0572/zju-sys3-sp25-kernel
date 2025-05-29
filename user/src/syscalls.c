@@ -1,3 +1,4 @@
+#include "stdio.h"
 #include <syscalls.h>
 #include <unistd.h>
 #include <stdint.h>
@@ -102,6 +103,25 @@ pid_t fork(void) {
     : "=r"(ret)
     : "i"(__NR_clone)
     : "a0", "a7", "memory"
+  );
+  return ret;
+}
+
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+  void *ret;
+  asm volatile(
+    "li a7, %1\n\t"
+    "mv a0, %2\n\t"
+    "mv a1, %3\n\t"
+    "mv a2, %4\n\t"
+    "mv a3, %5\n\t"
+    "mv a4, %6\n\t"
+    "mv a5, %7\n\t"
+    "ecall\n\t"
+    "mv %0, a0\n\t"
+    : "=r" (ret)
+    : "i" (__NR_mmap), "r" (addr), "r" (length), "r" (prot), "r" (flags), "r" (fd), "r" (offset)
+    : "a0", "a1", "a2", "a3", "a4", "a5", "a7", "memory"
   );
   return ret;
 }

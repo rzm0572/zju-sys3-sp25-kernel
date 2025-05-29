@@ -4,6 +4,8 @@
 #include <string.h>
 #include <inttypes.h>
 #include <unistd.h>
+#include <mman.h>
+#include <malloc.h>
 
 // define some tests
 #define PFH1 1001
@@ -13,6 +15,8 @@
 #define FORK3 1103
 #define FORK4 1104
 #define SHELL 1201
+#define MALLOC1 1211
+#define MALLOC2 1212
 #define CAT_BUF_SIZE 509
 
 #if defined(USER_MAIN) && !(USER_MAIN > 1000 && USER_MAIN < 1300)
@@ -356,4 +360,81 @@ int main() {
   }
   return 0;
 }
+
+#elif USER_MAIN == MALLOC1
+
+extern uint8_t _edata_user[];
+
+#define PGSIZE 0x1000
+#define PGROUNDDOWN(addr) ((addr) & ~(PGSIZE - 1))
+#define PGROUNDUP(addr) PGROUNDDOWN((addr) + PGSIZE - 1)
+
+int main() {
+  void *mmap_start = (void*)PGROUNDUP((uint64_t) _edata_user);
+  size_t mmap_size = 4 * PGSIZE;
+  uint64_t *mmap_ptr = (uint64_t*)mmap(mmap_start, mmap_size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  for (uint64_t i = 0; i < mmap_size / sizeof(uint64_t); i++) {
+    mmap_ptr[i] = i;
+  }
+  printf("mmap_ptr = %p\n", mmap_ptr);
+  printf("mmap_ptr[0] = %lu\n", mmap_ptr[0]);
+  printf("mmap_ptr[-1] = %lu\n", mmap_ptr[mmap_size / sizeof(uint64_t) - 1]);
+
+  while (1)
+    ;
+  
+  return 0;
+}
+
+#elif USER_MAIN == MALLOC2
+
+int main() {
+  int N = 8178;
+  heap_init();
+  printf("malloc %d bytes\n", N * sizeof(int));
+  int *a = (int*)malloc(N * sizeof(int));
+  for (int i = 0; i < N; i++) {
+    a[i] = i;
+  }
+  printf("a = %p\n", a);
+  printf("a[0] = %d\n", a[0]);
+  printf("&a[N-1] = %p\n", &a[N - 1]);
+  printf("a[N-1] = %d\n", a[N - 1]);
+
+  free(a);
+
+  int *b = (int*)malloc(N * sizeof(int));
+  printf("b = %p\n", b);
+  printf("b[0] = %d\n", b[0]);
+  printf("&b[N-1] = %p\n", &b[N - 1]);
+  printf("b[N-1] = %d\n", b[N - 1]);
+
+  free(b);
+
+  char *c[] = {
+    (char*)malloc(1),
+    (char*)malloc(1),
+    (char*)malloc(1),
+    (char*)malloc(2),
+    (char*)malloc(512)
+  };
+
+  printf("c[0] = %p\n", c[0]);
+  printf("c[1] = %p\n", c[1]);
+  printf("c[2] = %p\n", c[2]);
+  printf("c[3] = %p\n", c[3]);
+  printf("c[4] = %p\n", c[4]);
+
+  free(c[0]);
+  free(c[1]);
+  free(c[2]);
+  free(c[3]);
+  free(c[4]);
+
+  while (1)
+    ;
+
+  return 0;
+}
+
 #endif

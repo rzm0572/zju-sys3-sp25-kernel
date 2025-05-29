@@ -1,3 +1,4 @@
+#include "mman.h"
 #include <reg.h>
 #include <vm.h>
 #include <mm.h>
@@ -60,7 +61,7 @@ void load_program(struct task_struct *task) {
             if (phdr->p_flags & PF_X) {
                 flags |= VM_EXEC;
             }
-            do_mmap(task->mm, (void *)start_va, (size_t)(end_va - start_va), flags, phdr->p_offset, phdr->p_filesz);
+            do_mmap(task->mm, (void *)start_va, (size_t)(end_va - start_va), flags, NULL, phdr->p_offset, phdr->p_filesz);
         }
     }
     task->thread.sepc = ehdr->e_entry;
@@ -110,12 +111,12 @@ void task_init(void) {
         Elf64_Ehdr *ehdr = (Elf64_Ehdr*)_suapp;
         if (ehdr->e_ident[EI_MAG0] != ELFMAG0 || ehdr->e_ident[EI_MAG1] != ELFMAG1 || ehdr->e_ident[EI_MAG2] != ELFMAG2 || ehdr->e_ident[EI_MAG3] != ELFMAG3) {
             task[i]->thread.sepc = USER_START;
-            do_mmap(mm, (void*)USER_START, (size_t)(_euapp - _suapp), VM_READ | VM_WRITE | VM_EXEC, 0, (uint64_t)(_euapp - _suapp));
+            do_mmap(mm, (void*)USER_START, (size_t)(_euapp - _suapp), VM_READ | VM_WRITE | VM_EXEC, NULL, 0, (uint64_t)(_euapp - _suapp));
         }
         else {
             load_program(task[i]);
         }
-        do_mmap(mm, (void*)(USER_END - PGSIZE), (size_t)PGSIZE, VM_READ | VM_WRITE | VM_ANON, 0, 0);
+        do_mmap(mm, (void*)(USER_END - PGSIZE), (size_t)PGSIZE, VM_READ | VM_WRITE | VM_ANON, NULL, 0, 0);
         task[i]->files = file_init();
     }
 
@@ -201,7 +202,7 @@ struct vm_area_struct* find_vma(struct mm_struct* mm, void* va) {
     return NULL;
 }
 
-void* do_mmap(struct mm_struct* mm, void* va, size_t len, unsigned flags, uint64_t pgoff, uint64_t filesz) {
+void* do_mmap(struct mm_struct* mm, void* va, size_t len, unsigned flags, struct file* file, uint64_t pgoff, uint64_t filesz) {
     struct vm_area_struct* vma;
     if (mm->mmap == NULL) {
         mm->mmap = (struct vm_area_struct*)((unsigned char*)mm + sizeof(struct mm_struct));
@@ -240,6 +241,7 @@ void* do_mmap(struct mm_struct* mm, void* va, size_t len, unsigned flags, uint64
     vma->vm_start = va;
     vma->vm_end = (void*)((unsigned char*)va + len);
     vma->vm_flags = flags;
+    vma->vm_file = file;
     vma->vm_pgoff = pgoff;
     vma->vm_filesz = filesz;
 
@@ -322,4 +324,21 @@ long do_fork(struct pt_regs* regs) {
     struct pt_regs* child_regs = (struct pt_regs*)((uint64_t)regs + delta);
     child_regs->x[RISCV_REG_A0] = 0;
     return child_pid;
+}
+
+unsigned int to_vm_flags(int prot, int flags) {
+    unsigned int vm_flags = 0;
+    if (prot & PROT_READ) {
+        vm_flags |= VM_READ;
+    }
+    if (prot & PROT_WRITE) {
+        vm_flags |= VM_WRITE;
+    }
+    if (prot & PROT_EXEC) {
+        vm_flags |= VM_EXEC;
+    }
+    if (flags & MAP_ANON) {
+        vm_flags |= VM_ANON;
+    }
+    return vm_flags;
 }

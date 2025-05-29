@@ -1,6 +1,7 @@
 #include "private_kdefs.h"
 #include <printk.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <proc.h>
 #include <reg.h>
@@ -83,6 +84,17 @@ void ecall_from_user_mode_handler(struct pt_regs *regs, uint64_t scause, uint64_
         }
         case __NR_clone: {
             ret = sys_clone(regs);
+            break;
+        }
+        case __NR_mmap: {
+            ret = sys_mmap(
+                (void*)regs->x[RISCV_REG_A0],
+                (size_t)regs->x[RISCV_REG_A1],
+                (int)regs->x[RISCV_REG_A2],
+                (int)regs->x[RISCV_REG_A3],
+                (int)regs->x[RISCV_REG_A4],
+                (off_t)regs->x[RISCV_REG_A5]
+            );
             break;
         }
         default: {
