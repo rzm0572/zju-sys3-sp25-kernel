@@ -378,7 +378,7 @@ extern uint8_t _edata_user[];
 #define PGROUNDUP(addr) PGROUNDDOWN((addr) + PGSIZE - 1)
 
 int main() {
-  void *mmap_start = (void*)PGROUNDUP((uint64_t) _edata_user);
+  void *mmap_start = (void*)PGROUNDUP((uint64_t) _edata_user) + PGSIZE;
   size_t mmap_size = 4 * PGSIZE;
   uint64_t *mmap_ptr = (uint64_t*)mmap(mmap_start, mmap_size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   for (uint64_t i = 0; i < mmap_size / sizeof(uint64_t); i++) {
@@ -387,6 +387,8 @@ int main() {
   printf("mmap_ptr = %p\n", mmap_ptr);
   printf("mmap_ptr[0] = %lu\n", mmap_ptr[0]);
   printf("mmap_ptr[-1] = %lu\n", mmap_ptr[mmap_size / sizeof(uint64_t) - 1]);
+
+  munmap(mmap_start, mmap_size);
 
   while (1)
     ;

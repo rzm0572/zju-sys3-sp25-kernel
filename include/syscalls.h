@@ -10,6 +10,7 @@
 #define __NR_read 63
 #define __NR_write 64
 #define __NR_getpid 172
+#define __NR_munmap 215
 #define __NR_clone 220
 #define __NR_mmap 222
 

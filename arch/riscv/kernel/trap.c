@@ -98,6 +98,13 @@ void ecall_from_user_mode_handler(struct pt_regs *regs, uint64_t scause, uint64_
             );
             break;
         }
+        case __NR_munmap: {
+            ret = sys_munmap(
+                (void*)regs->x[RISCV_REG_A0],
+                (size_t)regs->x[RISCV_REG_A1]
+            );
+            break;
+        }
         case __NR_getdents64: {
             ret = sys_getdents64(
                 (int)regs->x[RISCV_REG_A0],

@@ -144,6 +144,10 @@ long sys_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset)
     }
 }
 
+long sys_munmap(void *addr, size_t len) {
+    return (long)do_munmap(current->mm, addr, len);
+}
+
 long sys_getdents64(int fd, void *dirp, size_t count) {
     if (fd < 0 || fd >= MAX_FILE_NUMBER) {
         return -1;

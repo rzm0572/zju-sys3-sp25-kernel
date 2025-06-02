@@ -106,6 +106,7 @@ void heap_init() {
 }
 
 int heap_inflate() {
+    printf("heap_start = %p, heap_size = %d\n", heap.heap_start, heap.heap_size);
     void* heap_start = mmap(heap.heap_start + heap.heap_size, heap.heap_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
     if (heap_start == MAP_FAILED) {
         printf("heap inflate failed\n");

@@ -13,6 +13,8 @@
 #define PRIORITY_MIN 1
 #define PRIORITY_MAX 10
 
+#define NR_VMA_SLOTS ((PGSIZE - sizeof(struct mm_struct)) / sizeof(struct vm_area_struct))
+
 typedef uint64_t *pagetable_t;
 
 // 中断处理所需寄存器堆
@@ -111,6 +113,8 @@ struct mm_struct {
    * @brief Number of VMAs.
    */
   size_t num_vmas;
+
+  struct vm_area_struct *free_vma_list;
 };
 
 
@@ -164,6 +168,8 @@ struct vm_area_struct *find_vma(struct mm_struct *mm, void *va);
  * @return 该映射的起始地址
  */
 void *do_mmap(struct mm_struct *mm, void *va, size_t len, unsigned flags, struct file *file, uint64_t pgoff, uint64_t filesz);
+
+int do_munmap(struct mm_struct* mm, void* va, size_t len);
 
 long do_fork(struct pt_regs *regs);
 

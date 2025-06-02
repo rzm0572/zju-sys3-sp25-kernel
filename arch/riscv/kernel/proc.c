@@ -206,12 +206,21 @@ void* do_mmap(struct mm_struct* mm, void* va, size_t len, unsigned flags, struct
     struct vm_area_struct* vma;
     if (mm->mmap == NULL) {
         mm->mmap = (struct vm_area_struct*)((unsigned char*)mm + sizeof(struct mm_struct));
+        for (uint64_t i = 0; i < NR_VMA_SLOTS - 1; i++) {
+            mm->mmap[i].vm_next = mm->mmap + i + 1;
+        }
+        mm->mmap[NR_VMA_SLOTS - 1].vm_next = NULL;
+        mm->free_vma_list = mm->mmap;
 
-        vma = mm->mmap;
+        vma = mm->free_vma_list;
+        mm->free_vma_list = vma->vm_next;
         vma->vm_prev = NULL;
         vma->vm_next = NULL;
     } else {
-        vma = mm->mmap + mm->num_vmas;
+        vma = mm->free_vma_list;
+        mm->free_vma_list = vma->vm_next;
+        vma->vm_next = NULL;
+
         struct vm_area_struct* curr = mm->mmap;
         struct vm_area_struct* prev = NULL;
         while (curr != NULL) {
@@ -248,6 +257,67 @@ void* do_mmap(struct mm_struct* mm, void* va, size_t len, unsigned flags, struct
     mm->num_vmas++;
 
     return va;
+}
+
+void remove_vma(struct mm_struct* mm, struct vm_area_struct* vma) {
+    if (vma == mm->mmap) {
+        mm->mmap = vma->vm_next;
+    }
+    if (vma->vm_prev != NULL) vma->vm_prev->vm_next = vma->vm_next;
+    if (vma->vm_next != NULL) vma->vm_next->vm_prev = vma->vm_prev;
+    memset(vma, 0, sizeof(struct vm_area_struct));
+    vma->vm_next = mm->free_vma_list;
+    mm->free_vma_list = vma;
+    mm->num_vmas--;
+}
+
+int do_munmap(struct mm_struct* mm, void* va, size_t len) {
+    struct vm_area_struct* vma = find_vma(mm, va);
+    if (vma == NULL) {
+        return -1;
+    }
+    if (((uint64_t)va & (PGSIZE - 1)) || (len & (PGSIZE - 1))) {
+        return -1;
+    }
+
+    if (vma->vm_start > va) {
+        return -1;
+    }
+
+    struct vm_area_struct* curr = vma;
+    while (curr != NULL && curr->vm_end < va + len) {
+        if (curr->vm_next == NULL) {
+            return -1;
+        }
+        if (curr->vm_next->vm_start != curr->vm_end) {
+            return -1;
+        }
+        curr = curr->vm_next;
+    }
+
+    if (curr == NULL) {
+        return -1;
+    }
+
+    remove_mapping(current->pgd, va, len);
+
+    struct vm_area_struct* end_vma = curr->vm_next;
+    while (vma != end_vma) {
+        struct vm_area_struct removed_vma;
+        memcpy(&removed_vma, vma, sizeof(struct vm_area_struct));
+        remove_vma(mm, vma);
+        
+        // Warning: Only support ANON vma for now
+        if (removed_vma.vm_start < va) {
+            do_mmap(mm, removed_vma.vm_start, va - removed_vma.vm_start, removed_vma.vm_flags, removed_vma.vm_file, removed_vma.vm_pgoff, removed_vma.vm_filesz);
+        }
+        if (removed_vma.vm_end > va + len) {
+            do_mmap(mm, va + len, removed_vma.vm_end - (va + len), removed_vma.vm_flags, removed_vma.vm_file, removed_vma.vm_pgoff, removed_vma.vm_filesz);
+        }
+        vma = removed_vma.vm_next;
+    }
+    
+    return 1;
 }
 
 void* copy_mm(struct mm_struct* dst, const struct mm_struct* src) {

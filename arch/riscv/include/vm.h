@@ -51,6 +51,8 @@ void setup_vm_final(void);
  */
 void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa, uint64_t sz, uint64_t perm);
 
+void remove_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, uint64_t sz);
+
 void copy_mapping(uint64_t dst_pgtbl[static PGSIZE / 8], uint64_t src_pgtbl[static PGSIZE / 8]);
 
 int is_valid_pte(uint64_t* pte_ptr);

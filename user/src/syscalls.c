@@ -108,6 +108,10 @@ pid_t fork(void) {
 }
 
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+  uint64_t ra = 0;
+  asm volatile("mv %0, ra" : "=r" (ra));
+  printf("ra = %p\n", ra);
+
   void *ret;
   asm volatile(
     "li a7, %1\n\t"
@@ -124,6 +128,21 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
     : "a0", "a1", "a2", "a3", "a4", "a5", "a7", "memory"
   );
   return ret;
+}
+
+int munmap(void *addr, size_t length) {
+  long ret;
+  asm volatile(
+    "li a7, %1\n\t"
+    "mv a0, %2\n\t"
+    "mv a1, %3\n\t"
+    "ecall\n\t"
+    "mv %0, a0\n\t"
+    : "=r" (ret)
+    : "i"(__NR_munmap), "r" (addr), "r" (length)
+    : "a0", "a1", "a7", "memory"
+  );
+  return (int)ret;
 }
 
 ssize_t getdents64(int fd, void *dirp, size_t count) {

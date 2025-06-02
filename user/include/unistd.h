@@ -19,6 +19,7 @@ ssize_t write(int fd, const void *buf, size_t count);
 pid_t getpid(void);
 pid_t fork(void);
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+int munmap(void *addr, size_t length);
 ssize_t getdents64(int fd, void* dirp, size_t count);
 
 #endif
