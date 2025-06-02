@@ -10,6 +10,7 @@
 #include <ksyscalls.h>
 #include <mm.h>
 #include <vm.h>
+#include <math.h>
 
 #define KERNEL_COLOR "\x1b[43m"
 #define ERROR_COLOR "\x1b[31m"
@@ -113,6 +114,14 @@ void ecall_from_user_mode_handler(struct pt_regs *regs, uint64_t scause, uint64_
             );
             break;
         }
+        case __NR_execve: {
+            ret = sys_execve(
+                (const char*)regs->x[RISCV_REG_A0],
+                (char* const*)regs->x[RISCV_REG_A1],
+                (char* const*)regs->x[RISCV_REG_A2]
+            );
+            break;
+        }
         default: {
             printk(ERROR_COLOR "[S] Not implemented syscall: %" PRIu64 RESET_COLOR "\n", syscall_nr);
             break;
@@ -182,8 +191,16 @@ void do_page_fault(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
 
     if (!is_valid_pte(pte_ptr)) {
         if (!(vma->vm_flags & VM_ANON)) {
-            void* uapp_page = (_suapp + vma->vm_pgoff) + ((uint64_t)va_rounddown - (uint64_t)vma->vm_start);
-            memcpy(new_page, uapp_page, PGSIZE);
+            int read_len = 0;
+            if (vma->vm_file == NULL) {
+                void* uapp_page = (_suapp + vma->vm_pgoff) + ((uint64_t)va_rounddown - (uint64_t)vma->vm_start);
+                read_len = uint64_t_min(PGSIZE, (uint64_t)vma->vm_end - (uint64_t)va_rounddown);
+                memcpy(new_page, uapp_page, read_len);
+            } else {
+                void* file_buf = new_page;
+                vma->vm_file->lseek(vma->vm_file, vma->vm_pgoff + ((uint64_t)va_rounddown - (uint64_t)vma->vm_start), SEEK_SET);
+                read_len = vma->vm_file->read(vma->vm_file, file_buf, PGSIZE);
+            }
         }
         create_mapping(current->pgd, va_rounddown, (void*)VA2PA(new_page), PGSIZE, vma_flags_to_perm(vma->vm_flags));
         

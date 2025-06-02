@@ -12,6 +12,7 @@
 #define __NR_getpid 172
 #define __NR_munmap 215
 #define __NR_clone 220
+#define __NR_execve 221
 #define __NR_mmap 222
 
 #endif

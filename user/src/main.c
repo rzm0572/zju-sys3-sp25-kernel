@@ -326,6 +326,9 @@ int parse_cmd(char *cmd, int len) {
     printf("Exiting shell...\n");
     return 1;
   }
+  else if (cmd[0] == '/') {
+    execve(cmd, NULL, NULL);
+  }
   else {
     printf("Command not supported: %s\n", cmd);
     return 0;

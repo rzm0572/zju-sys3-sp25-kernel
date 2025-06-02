@@ -173,6 +173,8 @@ int do_munmap(struct mm_struct* mm, void* va, size_t len);
 
 long do_fork(struct pt_regs *regs);
 
+int do_execve(const char *pathname, char *const argv[], char *const envp[]);
+
 unsigned int to_vm_flags(int prot, int flags);
 
 #endif

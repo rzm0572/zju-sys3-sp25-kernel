@@ -169,3 +169,10 @@ long sys_getdents64(int fd, void *dirp, size_t count) {
     dir->num_entries = dir->buf_size / sizeof(struct dirent);
     return dir->buf_size;
 }
+
+long sys_execve(const char *pathname, char *const argv[], char *const envp[]) {
+    (void)argv;
+    (void)envp;
+    do_execve(pathname, NULL, NULL);
+    return -1;
+}

@@ -193,6 +193,11 @@ void remove_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, uint64_t sz) {
             uint64_t vpn_second_low = (vpn_root == vpn_low[2] && vpn_first == vpn_low[1]) ? vpn_low[0] : 0ULL;
             uint64_t vpn_second_high = (vpn_root == vpn_high[2] && vpn_first == vpn_high[1]) ? vpn_high[0] : (1ULL << SV39_VPN_LEN) - 1;
             for (uint64_t vpn_second = vpn_second_low; vpn_second <= vpn_second_high; vpn_second++) {
+                uint64_t pte_second = page_table_second[vpn_second];
+                uint64_t ppn_second = GET_SUBBITMAP(pte_second, SV39_PTE_PPN_BEGIN, SV39_PTE_PPN_END);
+                if (PTE_HAS_PERM(pte_second, V)) {
+                    deref_page((uint64_t*)PA2VA(PPN2PHYS(ppn_second)));
+                }
                 page_table_second[vpn_second] = SV39_PTE(0, 0);
             }
         }
@@ -222,6 +227,25 @@ void copy_mapping(uint64_t dst_pgtbl[static PGSIZE / 8], uint64_t src_pgtbl[stat
             }
         }
     }
+}
+
+void delete_mapping(uint64_t pgtbl[static PGSIZE / 8]) {
+    for (uint64_t i = 0; i < PGSIZE / 8; i++) {
+        if (pgtbl[i] & SV39_PTE_V) {
+            uint64_t ppn_lv2 = SV39_GET_PPN(pgtbl[i]);
+            uint64_t *pgtbl_lv2 = (uint64_t*)PA2VA(PPN2PHYS(ppn_lv2));
+            
+            for (uint64_t j = 0; j < PGSIZE / 8; j++) {
+                if (pgtbl_lv2[j] & SV39_PTE_V) {
+                    uint64_t ppn_lv3 = SV39_GET_PPN(pgtbl_lv2[j]);
+                    uint64_t *pgtbl_lv3 = (uint64_t*)PA2VA(PPN2PHYS(ppn_lv3));
+                    free_pages(pgtbl_lv3);
+                }
+            }
+            free_pages(pgtbl_lv2);
+        }
+    }
+    memset(pgtbl, 0, PGSIZE);
 }
 
 int is_valid_pte(uint64_t* pte_ptr) {

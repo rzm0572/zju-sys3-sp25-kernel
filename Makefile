@@ -36,14 +36,14 @@ run: all
 	# Launch the qemu ......
 	qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios $(SPIKE_CONF)/fw_jump.bin \
         -global virtio-mmio.force-legacy=false \
-        -drive file=disk.img,if=none,format=raw,id=hd0 \
+        -drive file=disk_.img,if=none,format=raw,id=hd0 \
         -device virtio-blk-device,drive=hd0
 
 debug: all
 	# Launch the qemu for debug ......
 	qemu-system-riscv64 -nographic -machine virt -kernel vmlinux -bios $(SPIKE_CONF)/fw_jump.bin \
         -global virtio-mmio.force-legacy=false \
-        -drive file=disk.img,if=none,format=raw,id=hd0 \
+        -drive file=disk_.img,if=none,format=raw,id=hd0 \
         -device virtio-blk-device,drive=hd0 -S -s
 
 SNPRINTF_TEST_DIR := $(realpath $(CURDIR)/../../../repo/sys-project/testcode/snprintf)

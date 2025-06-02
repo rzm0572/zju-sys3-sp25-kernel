@@ -21,5 +21,6 @@ pid_t fork(void);
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 int munmap(void *addr, size_t length);
 ssize_t getdents64(int fd, void* dirp, size_t count);
+int execve(const char *pathname, char *const argv[], char *const envp[]);
 
 #endif

@@ -1,6 +1,8 @@
 #ifndef _FCNTL_H_
 #define _FCNTL_H_
 
+#include <fs.h>
+
 #define AT_FDCWD    -100 
 #define O_RDONLY    0x0001
 #define O_WRONLY    0x0002
@@ -16,9 +18,5 @@
 
 #define O_LARGEFILE 0x100000
 #define O_DIRECTORY 0x200000
-
-#define SEEK_SET    0x0000
-#define SEEK_CUR    0x0001
-#define SEEK_END    0x0002
 
 #endif /* _FCNTL_H_ */

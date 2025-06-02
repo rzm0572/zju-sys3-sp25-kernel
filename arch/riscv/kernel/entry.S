@@ -186,3 +186,34 @@ __switch_to:
     sfence.vma
 
     ret
+
+.global ret_from_execve
+ret_from_execve:
+    addi t0, a0, 0x20
+    ld ra, 0x00(t0)
+    ld sp, 0x08(t0)
+    ld s0, 0x10(t0)
+    ld s1, 0x18(t0)
+    ld s2, 0x20(t0)
+    ld s3, 0x28(t0)
+    ld s4, 0x30(t0)
+    ld s5, 0x38(t0)
+    ld s6, 0x40(t0)
+    ld s7, 0x48(t0)
+    ld s8, 0x50(t0)
+    ld s9, 0x58(t0)
+    ld s10, 0x60(t0)
+    ld s11, 0x68(t0)
+
+    ld t1, 0x70(t0)
+    csrw sepc, t1
+    ld t1, 0x78(t0)
+    csrw sstatus, t1
+    ld t1, 0x80(t0)
+    csrw sscratch, t1
+    ld t1, 0x88(t0)
+    csrw stval, t1
+    ld t1, 0x90(t0)
+    csrw scause, t1
+
+    ret

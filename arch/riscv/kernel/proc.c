@@ -1,3 +1,5 @@
+#include "fcntl.h"
+#include "ksyscalls.h"
 #include "mman.h"
 #include <reg.h>
 #include <vm.h>
@@ -24,6 +26,7 @@ extern uint8_t _euapp[];
 void __dummy(void);
 void __switch_to(struct task_struct *prev, struct task_struct *next);
 void ret_from_fork(void);
+void ret_from_execve(struct task_struct *);
 
 int randint(int low, int high) {
   if (low == high) {
@@ -43,9 +46,9 @@ int get_max_cnt_pid(void) {
     return max_cnt_pid;
 }
 
-void load_program(struct task_struct *task) {
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)_suapp;
-    Elf64_Phdr *phdrs = (Elf64_Phdr *)(_suapp + ehdr->e_phoff);
+void load_program(struct task_struct *task, void* start_addr, struct file* file) {
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)start_addr;
+    Elf64_Phdr *phdrs = (Elf64_Phdr *)(start_addr + ehdr->e_phoff);
     for (int i = 0; i < ehdr->e_phnum; i++) {
         Elf64_Phdr *phdr = phdrs + i;
         if (phdr->p_type == PT_LOAD) {
@@ -61,7 +64,7 @@ void load_program(struct task_struct *task) {
             if (phdr->p_flags & PF_X) {
                 flags |= VM_EXEC;
             }
-            do_mmap(task->mm, (void *)start_va, (size_t)(end_va - start_va), flags, NULL, phdr->p_offset, phdr->p_filesz);
+            do_mmap(task->mm, (void *)start_va, (size_t)(end_va - start_va), flags, file, phdr->p_offset, phdr->p_filesz);
         }
     }
     task->thread.sepc = ehdr->e_entry;
@@ -107,6 +110,7 @@ void task_init(void) {
         struct mm_struct *mm = task[i]->mm;
         mm->mmap = NULL;
         mm->num_vmas = 0;
+        mm->free_vma_list = NULL;
 
         Elf64_Ehdr *ehdr = (Elf64_Ehdr*)_suapp;
         if (ehdr->e_ident[EI_MAG0] != ELFMAG0 || ehdr->e_ident[EI_MAG1] != ELFMAG1 || ehdr->e_ident[EI_MAG2] != ELFMAG2 || ehdr->e_ident[EI_MAG3] != ELFMAG3) {
@@ -114,7 +118,7 @@ void task_init(void) {
             do_mmap(mm, (void*)USER_START, (size_t)(_euapp - _suapp), VM_READ | VM_WRITE | VM_EXEC, NULL, 0, (uint64_t)(_euapp - _suapp));
         }
         else {
-            load_program(task[i]);
+            load_program(task[i], _suapp, NULL);
         }
         do_mmap(mm, (void*)(USER_END - PGSIZE), (size_t)PGSIZE, VM_READ | VM_WRITE | VM_ANON, NULL, 0, 0);
         task[i]->files = file_init();
@@ -411,4 +415,57 @@ unsigned int to_vm_flags(int prot, int flags) {
         vm_flags |= VM_ANON;
     }
     return vm_flags;
+}
+
+int do_execve(const char* pathname, char* const argv[], char* const envp[]) {
+    (void)argv;
+    (void)envp;
+
+    int fd = (int)sys_openat(AT_FDCWD, pathname, O_RDONLY);
+    if (fd < 0) {
+        return -1;
+    }
+
+    char *elf_header = (char*)alloc_page();
+    int ret = sys_read(fd, elf_header, PGSIZE);
+    if (ret == -1) {
+        return -1;
+    }
+
+    struct vm_area_struct* vma = current->mm->mmap;
+    while (vma != NULL) {
+        struct vm_area_struct* next = vma->vm_next;
+        remove_mapping(current->pgd, vma->vm_start, vma->vm_end - vma->vm_start);
+        remove_vma(current->mm, vma);
+        vma = next;
+    }
+
+    free_pages(current->mm);
+    current->mm = (struct mm_struct*)alloc_page();
+    current->mm->mmap = NULL;
+    current->mm->num_vmas = 0;
+    current->mm->free_vma_list = NULL;
+
+    // delete_mapping(current->pgd);
+    // copy_mapping(current->pgd, swapper_pg_dir);
+    struct file* file = &current->files->fd_array[fd];
+    load_program(current, elf_header, file);
+    free_pages(elf_header);
+
+    do_mmap(current->mm, (void*)(USER_END - PGSIZE), (size_t)PGSIZE, VM_READ | VM_WRITE | VM_EXEC, NULL, 0, 0);
+
+    csr_set_bit(current->thread.sstatus, CSR_SSTATUS_SPP, 0);  // set spp = 0
+    csr_set_bit(current->thread.sstatus, CSR_SSTATUS_SUM, 1);  // set sum = 1
+    
+    current->thread.ra = (uint64_t)&__dummy;
+    current->thread.sp = (uint64_t)current + PGSIZE;
+    current->thread.sscratch = USER_END;
+    current->thread.stval = 0;
+    current->thread.scause = 0;
+    memset(current->thread.s, 0, sizeof(current->thread.s));
+
+    asm volatile("sfence.vma" ::: "memory");
+    ret_from_execve(current);
+    
+    return -1;
 }

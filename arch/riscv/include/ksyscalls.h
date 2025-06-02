@@ -9,6 +9,7 @@
 
 struct pt_regs;
 
+long sys_openat(int dfd, const char *path, int flags);
 long sys_open(const char *filename, int flags);
 long sys_close(int fd);
 long sys_lseek(int fd, long offset, int whence);
@@ -19,6 +20,7 @@ long sys_clone(struct pt_regs *regs);
 long sys_mmap(void *addr, size_t len, int prot, int flags, int fd, long offset);
 long sys_munmap(void *addr, size_t len);
 long sys_getdents64(int fd, void *dirp, size_t count);
+long sys_execve(const char *filename, char *const argv[], char *const envp[]);
 
 typedef long (*syscall_handler_t)();
 
