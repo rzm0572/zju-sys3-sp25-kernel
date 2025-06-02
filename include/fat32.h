@@ -63,11 +63,16 @@ void dump_fat32_bpb(struct fat32_bpb *bpb);
 void fat32_init(uint64_t lba, uint64_t size);
 int is_fat32(uint64_t lba);
 struct fat32_file fat32_open_file(const char *path);
+struct fat32_file fat32_open_dir(const char *path);
 
 int64_t fat32_lseek(struct file* file, int64_t offset, uint64_t whence);
 int64_t fat32_write(struct file* file, const void* buf, uint64_t len);
 int64_t fat32_read(struct file* file, void* buf, uint64_t len);
 
+int64_t fat32_read_dir(struct file* file, void* buf, uint64_t len);
+
 #define FAT32_ENTRY_PER_SECTOR (VIRTIO_BLK_SECTOR_SIZE / sizeof(struct fat32_dir_entry))
+
+#define INVALID_CLUSTER 0x0ffffff8
 
 #endif

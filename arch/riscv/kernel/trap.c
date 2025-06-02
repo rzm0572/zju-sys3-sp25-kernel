@@ -1,4 +1,5 @@
 #include "private_kdefs.h"
+#include "sys_dirent.h"
 #include <printk.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -94,6 +95,14 @@ void ecall_from_user_mode_handler(struct pt_regs *regs, uint64_t scause, uint64_
                 (int)regs->x[RISCV_REG_A3],
                 (int)regs->x[RISCV_REG_A4],
                 (off_t)regs->x[RISCV_REG_A5]
+            );
+            break;
+        }
+        case __NR_getdents64: {
+            ret = sys_getdents64(
+                (int)regs->x[RISCV_REG_A0],
+                (void*)regs->x[RISCV_REG_A1],
+                (size_t)regs->x[RISCV_REG_A2]
             );
             break;
         }

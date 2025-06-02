@@ -5,6 +5,7 @@
 
 #define __NR_open 56
 #define __NR_close 57
+#define __NR_getdents64 61
 #define __NR_lseek 62
 #define __NR_read 63
 #define __NR_write 64

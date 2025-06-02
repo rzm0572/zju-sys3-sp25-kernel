@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <mman.h>
 #include <malloc.h>
+#include <fcntl.h>
+#include <dirent.h>
 
 // define some tests
 #define PFH1 1001
@@ -236,12 +238,17 @@ int parse_cmd(char *cmd, int len) {
       cmd ++;
     }
     char *filename = get_param(cmd);
-    int fd = open(filename, O_RDONLY);
+    int fd = open(filename, O_RDONLY | O_DIRECTORY);
     if (fd == -1) {
       printf("can't open file: %s\n", filename);
       return 0;
     }
-
+    DIR* dirp = fdopendir(fd);
+    struct dirent *ent;
+    while ((ent = readdir(dirp)) != NULL) {
+      printf("%s\n", ent->d_name);
+    }
+    closedir(dirp);
   }
   else if (cmd[0] == 'c' && cmd[1] == 'a' && cmd[2] == 't') {
     char *filename = get_param(cmd + 3);
@@ -255,6 +262,7 @@ int parse_cmd(char *cmd, int len) {
     // printf("%d\n", fd);
     while (1) {
       int num_chars = read(fd, cat_buf, CAT_BUF_SIZE);
+      printf("num_chars = %d\n", num_chars);
       if (!num_chars) {
         if (last_char != '\n') {
           printf("$\n");

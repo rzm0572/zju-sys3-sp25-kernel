@@ -11,3 +11,4 @@ compile_commands.json
 *.elf
 *.bin
 *.asm
+*.img

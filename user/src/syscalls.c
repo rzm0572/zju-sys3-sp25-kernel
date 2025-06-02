@@ -126,3 +126,18 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
   return ret;
 }
 
+ssize_t getdents64(int fd, void *dirp, size_t count) {
+  ssize_t ret;
+  asm volatile(
+    "li a7, %1\n\t"
+    "mv a0, %2\n\t"
+    "mv a1, %3\n\t"
+    "mv a2, %4\n\t"
+    "ecall\n\t"
+    "mv %0, a0\n\t"
+    : "=r" (ret)
+    : "i"(__NR_getdents64), "r" (fd), "r" (dirp), "r" (count)
+    : "a0", "a1", "a2", "a7", "memory"
+  );
+  return ret;
+}

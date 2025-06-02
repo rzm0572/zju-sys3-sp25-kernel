@@ -35,6 +35,13 @@ void strcpy(char *restrict dst, const char *restrict src) {
     while ((*dst++ = *src++) != '\0') ;
 }
 
+void strncpy(char *restrict dst, const char *restrict src, size_t n) {
+    size_t i = 0;
+    while ((*dst++ = *src++) != '\0' && i < n) {
+        i++;
+    }
+}
+
 size_t strlen(const char *restrict s) {
     size_t len = 0;
     while (*(s++) != '\0') {

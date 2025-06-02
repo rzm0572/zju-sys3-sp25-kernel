@@ -17,6 +17,7 @@ long sys_write(unsigned fd, const char *buf, size_t count);
 long sys_getpid(void);
 long sys_clone(struct pt_regs *regs);
 long sys_mmap(void *addr, size_t len, int prot, int flags, int fd, long offset);
+long sys_getdents64(int fd, void *dirp, size_t count);
 
 typedef long (*syscall_handler_t)();
 

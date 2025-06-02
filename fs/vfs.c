@@ -13,9 +13,10 @@ char uart_getchar() {
 }
 
 int64_t stdin_read(struct file *file, void *buf, uint64_t len) {
+    (void)file;
     // printk("Now reading from stdin: %d\n", len);
     char *to_read = (char *)buf;
-    for (int i = 0; i < len; i++) {
+    for (uint64_t i = 0; i < len; i++) {
         to_read[i] = uart_getchar();
         // printk("%d\n", i);
         stdout->write(stdout, &to_read[i], 1);
@@ -25,8 +26,9 @@ int64_t stdin_read(struct file *file, void *buf, uint64_t len) {
 }
 
 int64_t stdout_write(struct file *file, const void *buf, uint64_t len) {
+    (void)file;
     char to_print[len + 1];
-    for (int i = 0; i < len; i++) {
+    for (uint64_t i = 0; i < len; i++) {
         to_print[i] = ((const char *)buf)[i];
     }
     to_print[len] = 0;
@@ -34,8 +36,9 @@ int64_t stdout_write(struct file *file, const void *buf, uint64_t len) {
 }
 
 int64_t stderr_write(struct file *file, const void *buf, uint64_t len) {
+    (void)file;
     char to_print[len + 1];
-    for (int i = 0; i < len; i++) {
+    for (uint64_t i = 0; i < len; i++) {
         to_print[i] = ((const char *)buf)[i];
     }
     to_print[len] = 0;

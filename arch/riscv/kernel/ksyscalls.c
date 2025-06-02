@@ -6,6 +6,7 @@
 #include <fs.h>
 #include <printk.h>
 #include <mman.h>
+#include <sys_dirent.h>
 
 extern struct task_struct *current;
 extern uint64_t num_tasks;
@@ -21,6 +22,7 @@ struct ksyscall_table syscall_table[] = {
 };
 
 long sys_openat(int dfd, const char *path, int flags) {
+    (void)dfd;
     int res = -1;
     for (int i = 0; i < MAX_FILE_NUMBER; i++) {
         if (current->files->fd_array[i].opened) {
@@ -73,6 +75,9 @@ long sys_lseek(int fd, long offset, int whence) {
 }
 
 long sys_read(unsigned fd, char *buff, size_t count) {
+    if (fd < 0 || fd >= MAX_FILE_NUMBER) {
+        return -1;
+    }
     if (fd <= 2) {
         FILE* in = &__iob[fd];
         if (in->read == NULL) {
@@ -96,6 +101,10 @@ long sys_read(unsigned fd, char *buff, size_t count) {
 }
 
 long sys_write(unsigned fd, const char *buf, size_t count) {
+    if (fd < 0 || fd >= MAX_FILE_NUMBER) {
+        return -1;
+    }
+
     if (fd <= 2) {
         FILE* out = &__iob[fd];
         if (out->write == NULL) {
@@ -133,4 +142,26 @@ long sys_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset)
         struct file *file = &current->files->fd_array[fd];
         return (long)do_mmap(current->mm, addr, len, to_vm_flags(prot, flags), file, offset, len);
     }
+}
+
+long sys_getdents64(int fd, void *dirp, size_t count) {
+    if (fd < 0 || fd >= MAX_FILE_NUMBER) {
+        return -1;
+    }
+
+    struct file *file = &current->files->fd_array[fd];
+    if (!file->opened) {
+        return -1;
+    } else if (!(file->perms & FILE_READABLE)) {
+        return -1;
+    }
+
+    DIR *dir = (DIR*)dirp;
+    dir->buf_size = file->read(file, dir->buf, count);
+    if (dir->buf_size <= 0) {
+        dir->num_entries = 0;
+        return -1;
+    }
+    dir->num_entries = dir->buf_size / sizeof(struct dirent);
+    return dir->buf_size;
 }

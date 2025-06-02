@@ -8,6 +8,10 @@ static int printf_syscall_write(FILE *restrict fp, const void *restrict buf, siz
   return (int)write(fileno(fp), buf, len);
 }
 
+static int scanf_syscall_read(FILE *restrict fp, void *restrict buf, size_t len) {
+  return (int)read(fileno(fp), buf, len);
+}
+
 int fileno(FILE *restrict f) {
   return f->fd;
 }
@@ -21,7 +25,7 @@ int printf(const char *restrict fmt, ...) {
 }
 
 FILE __iob[3] = {
-    {},                              // stdin
+    {.fd = STDIN_FILENO, .read = scanf_syscall_read},     // stdin
     {.fd = STDOUT_FILENO, .write = printf_syscall_write}, // stdout
-    {},                              // stderr
+    {.fd = STDERR_FILENO, .write = printf_syscall_write}, // stderr
 };
