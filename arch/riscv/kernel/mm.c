@@ -152,7 +152,7 @@ static void buddy_init(void) {
     buddy_alloc(1);
   }
 
-  printk("...buddy_init done! size = %lu\n", buddy.size);
+  printk(MSG("mm", "...buddy_init done! size = %lu\n"), buddy.size);
   return;
 }
 

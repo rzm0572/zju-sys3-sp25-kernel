@@ -22,5 +22,8 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 int munmap(void *addr, size_t length);
 ssize_t getdents64(int fd, void* dirp, size_t count);
 int execve(const char *pathname, char *const argv[], char *const envp[]);
+pid_t wait(int *wstatus);
+pid_t waitpid(pid_t pid, int *wstatus, int options);
+void exit(int status);
 
 #endif

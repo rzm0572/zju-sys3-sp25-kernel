@@ -144,7 +144,7 @@ void create_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, void *pa,
         }
     }
     
-    printk("pgtbl = 0x%" PRIx64 ": map [0x%" PRIx64 ", 0x%" PRIx64 ") -> [0x%" PRIx64 ", 0x%" PRIx64 "), perm = 0x%" PRIx64 ", size=%" PRId64 "\n", (uint64_t)pgtbl, (uint64_t)va, (uint64_t)va + sz, (uint64_t)pa, (uint64_t) pa + sz, perm, sz);
+    printk(MSG("vm", "pgtbl = 0x%" PRIx64 ": map [0x%" PRIx64 ", 0x%" PRIx64 ") -> [0x%" PRIx64 ", 0x%" PRIx64 "), perm = 0x%" PRIx64 ", size=%" PRId64 "\n"), (uint64_t)pgtbl, (uint64_t)va, (uint64_t)va + sz, (uint64_t)pa, (uint64_t) pa + sz, perm, sz);
 }
 
 void remove_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, uint64_t sz) {
@@ -203,7 +203,7 @@ void remove_mapping(uint64_t pgtbl[static PGSIZE / 8], void *va, uint64_t sz) {
         }
     }
 
-    printk("pgtbl = 0x%" PRIx64 ": unmap [0x%" PRIx64 ", 0x%" PRIx64 "), size=%" PRId64 "\n", (uint64_t)pgtbl, (uint64_t)va, (uint64_t)va + sz, sz);
+    printk(MSG("vm", "pgtbl = 0x%" PRIx64 ": unmap [0x%" PRIx64 ", 0x%" PRIx64 "), size=%" PRId64 "\n"), (uint64_t)pgtbl, (uint64_t)va, (uint64_t)va + sz, sz);
 }
 
 void copy_mapping(uint64_t dst_pgtbl[static PGSIZE / 8], uint64_t src_pgtbl[static PGSIZE / 8]) {
@@ -234,11 +234,17 @@ void delete_mapping(uint64_t pgtbl[static PGSIZE / 8]) {
         if (pgtbl[i] & SV39_PTE_V) {
             uint64_t ppn_lv2 = SV39_GET_PPN(pgtbl[i]);
             uint64_t *pgtbl_lv2 = (uint64_t*)PA2VA(PPN2PHYS(ppn_lv2));
+            if (pgtbl_lv2 < (uint64_t*)VM_START || pgtbl_lv2 >= (uint64_t*)VM_END) {
+                continue;
+            }
             
             for (uint64_t j = 0; j < PGSIZE / 8; j++) {
                 if (pgtbl_lv2[j] & SV39_PTE_V) {
                     uint64_t ppn_lv3 = SV39_GET_PPN(pgtbl_lv2[j]);
                     uint64_t *pgtbl_lv3 = (uint64_t*)PA2VA(PPN2PHYS(ppn_lv3));
+                    if (pgtbl_lv3 < (uint64_t*)VM_START || pgtbl_lv3 >= (uint64_t*)VM_END) {
+                        continue;
+                    }
                     free_pages(pgtbl_lv3);
                 }
             }
@@ -246,6 +252,7 @@ void delete_mapping(uint64_t pgtbl[static PGSIZE / 8]) {
         }
     }
     memset(pgtbl, 0, PGSIZE);
+    printk(MSG("vm", "delete_mapping: pgtbl = 0x%" PRIx64 "\n"), (uint64_t)pgtbl);
 }
 
 int is_valid_pte(uint64_t* pte_ptr) {

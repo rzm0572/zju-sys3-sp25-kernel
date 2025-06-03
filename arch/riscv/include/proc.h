@@ -5,8 +5,15 @@
 #include <stddef.h>
 #include <fs.h>
 #include <mman.h>
+#include <signal.h>
+#include <reg.h>
 
-#define TASK_RUNNING 0 // 为了简化实验，所有的线程都只有一种状态
+enum {
+  TASK_RUNNING = 0,
+  TASK_ZOMBIE = 1,
+  TASK_INTERRUPTIBLE = 2,
+  TASK_STOPPED = 3
+};
 
 // 可自行修改的宏定义
 #define NR_TASKS (1 + 8) // idle 线程 + 用户线程
@@ -16,13 +23,6 @@
 #define NR_VMA_SLOTS ((PGSIZE - sizeof(struct mm_struct)) / sizeof(struct vm_area_struct))
 
 typedef uint64_t *pagetable_t;
-
-// 中断处理所需寄存器堆
-struct pt_regs {
-  uint64_t x[32];
-  uint64_t sepc;
-  uint64_t sscratch;
-};
 
 
 // 线程状态结构
@@ -41,17 +41,25 @@ struct thread_struct {
 // 进程数据结构
 struct task_struct {
   uint64_t pid;      // 进程 ID
+  uint64_t fpid;     // 父进程 ID
+  uint64_t* cpid;
+  uint64_t child_cnt;
   uint64_t state;    // 状态
   uint64_t priority; // 优先级
   uint64_t counter;  // 剩余时间
 
   struct thread_struct thread; // 线程结构
-
   pagetable_t pgd;   // 页表
-
   struct mm_struct *mm;
-
   struct files_struct *files;
+  struct signal_struct *signal;
+
+  uint8_t exit_code;
+};
+
+struct wait_task {
+  uint64_t valid;
+  uint64_t mask;
 };
 
 // VMA
@@ -174,6 +182,10 @@ int do_munmap(struct mm_struct* mm, void* va, size_t len);
 long do_fork(struct pt_regs *regs);
 
 int do_execve(const char *pathname, char *const argv[], char *const envp[]);
+
+void do_exit(int status);
+
+void do_wait(int pid, int *status, int options);
 
 unsigned int to_vm_flags(int prot, int flags);
 

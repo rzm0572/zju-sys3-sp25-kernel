@@ -176,3 +176,46 @@ int execve(const char *pathname, char *const argv[], char *const envp[]) {
   );
   return (int)ret;
 }
+
+pid_t wait(int *wstatus) {
+  pid_t ret;
+  asm volatile(
+    "li a7, %1\n\t"
+    "li a0, -1\n\t"
+    "mv a1, %2\n\t"
+    "mv a2, %3\n\t"
+    "ecall\n\t"
+    "mv %0, a0\n\t"
+    : "=r" (ret)
+    : "i"(__NR_waitpid), "r" (wstatus), "r" (0)
+    : "a0", "a1", "a2", "a7", "memory"
+  );
+  return ret;
+}
+
+pid_t waitpid(pid_t pid, int *wstatus, int options) {
+  pid_t ret;
+  asm volatile(
+    "li a7, %1\n\t"
+    "mv a0, %2\n\t"
+    "mv a1, %3\n\t"
+    "mv a2, %4\n\t"
+    "ecall\n\t"
+    "mv %0, a0\n\t"
+    : "=r" (ret)
+    : "i"(__NR_waitpid), "r" (pid), "r" (wstatus), "r" (options)
+    : "a0", "a1", "a2", "a7", "memory"
+  );
+  return ret;
+}
+
+void exit(int status) {
+  asm volatile(
+    "li a7, %0\n\t"
+    "mv a0, %1\n\t"
+    "ecall\n\t"
+    :
+    : "i"(__NR_exit), "r" (status)
+    : "a0", "a7", "memory"
+  );
+}

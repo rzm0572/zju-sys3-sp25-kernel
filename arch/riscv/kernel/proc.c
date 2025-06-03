@@ -1,6 +1,7 @@
 #include "fcntl.h"
 #include "ksyscalls.h"
 #include "mman.h"
+#include "signal.h"
 #include <reg.h>
 #include <vm.h>
 #include <mm.h>
@@ -13,7 +14,8 @@
 #include <elf.h>
 #include <fs.h>
 
-static struct task_struct *task[NR_TASKS]; // 线程数组，所有的线程都保存在此
+struct task_struct *task[NR_TASKS];        // 线程数组，所有的线程都保存在此
+struct wait_task wait_queue[NR_TASKS];    // 等待队列
 static struct task_struct *idle;           // idle 线程
 struct task_struct *current;               // 当前运行线程
 
@@ -39,11 +41,35 @@ int randint(int low, int high) {
 int get_max_cnt_pid(void) {
     int max_cnt_pid = 0;
     for (uint64_t i = 1; i < num_tasks; i++) {
+        if (task[i] == NULL) {
+            continue;
+        }
+        if (task[i]->state != TASK_RUNNING) {
+            continue;
+        }
         if (task[i]->counter > task[max_cnt_pid]->counter) {
             max_cnt_pid = i;
         }
     }
     return max_cnt_pid;
+}
+
+int get_avail_task_id(void) {
+    for (uint64_t i = 1; i < num_tasks; i++) {
+        if (task[i] == NULL) {
+            return i;
+        }
+    }
+    return num_tasks++;
+}
+
+int check_elf_header(void* start_addr) {
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)start_addr;
+    if (ehdr->e_ident[EI_MAG0] != ELFMAG0 || ehdr->e_ident[EI_MAG1] != ELFMAG1 || ehdr->e_ident[EI_MAG2] != ELFMAG2 || ehdr->e_ident[EI_MAG3] != ELFMAG3) {
+        return -1;
+    } else {
+        return 0;
+    }
 }
 
 void load_program(struct task_struct *task, void* start_addr, struct file* file) {
@@ -75,9 +101,14 @@ void task_init(void) {
 
     idle = alloc_page();
     idle->pid = 0;
+    idle->fpid = 0;
     idle->state = TASK_RUNNING;
     idle->priority = 0;
     idle->counter = 0;
+    idle->cpid = alloc_page();
+    memset(idle->cpid, 0, PGSIZE);
+    idle->child_cnt = 0;
+    wait_queue[0].valid = 0;
 
     current = idle;
     task[0] = idle;
@@ -87,9 +118,16 @@ void task_init(void) {
     for (uint64_t i = 1; i < num_tasks; i++) {
         task[i] = alloc_page();
         task[i]->pid = i;
+        task[i]->fpid = 0;
         task[i]->state = TASK_RUNNING;
         task[i]->priority = randint(PRIORITY_MIN, PRIORITY_MAX);
         task[i]->counter = 0;
+        task[i]->cpid = alloc_page();
+        memset(idle->cpid, 0, PGSIZE);
+        task[i]->child_cnt = 0;
+        idle->cpid[idle->child_cnt++] = i;
+
+        signal_init(i);
 
         task[i]->thread.ra = (uint64_t)&__dummy;
         task[i]->thread.sp = (uint64_t)task[i] + PGSIZE;
@@ -128,7 +166,7 @@ void task_init(void) {
         task[i] = NULL;
     }
 
-    printk("...task_init done!\n");
+    printk(MSG("process", "task_init done!\n"));
 }
 
 void dummy_task(void) {
@@ -144,7 +182,7 @@ void dummy_task(void) {
 #ifdef ONBOARD
             printk("[P=%" PRIu64 "] %" PRIu64 "\n", current->pid, ++local);
 #else
-            printk("[PID = %" PRIu64 " @ 0x%" PRIx64 "] Running. local = %" PRIu32 ", counter = %" PRIu64 "\n", current->pid, current->thread.sp, ++local, current->counter);
+            printk(MSG("process", "[PID = %" PRIu64 " @ 0x%" PRIx64 "] Running. local = %" PRIu32 ", counter = %" PRIu64 "\n"), current->pid, current->thread.sp, ++local, current->counter);
 #endif
         }
     }
@@ -158,7 +196,7 @@ void switch_to(struct task_struct* next) {
 #ifdef ONBOARD
         printk("-> [P=%" PRIu64 "]\n", current->pid);
 #else
-        printk("switch to [PID = %" PRIu64 ", PRIORITY = %" PRIu64 ", COUNTER = %" PRIu64 "]\n", current->pid, current->priority, current->counter);
+        printk(MSG("process", "switch to [PID = %" PRIu64 ", PRIORITY = %" PRIu64 ", COUNTER = %" PRIu64 "]\n"), current->pid, current->priority, current->counter);
 #endif
 
         __switch_to(curr, next);
@@ -180,6 +218,10 @@ void schedule(void) {
     int max_cnt_pid = get_max_cnt_pid();
     if (max_cnt_pid == 0) {
         for (uint64_t i = 1; i < num_tasks; i++) {
+            if (task[i] == NULL) {
+                continue;
+            }
+
             task[i]->counter = task[i]->priority;
 
 #ifdef ONBOARD
@@ -350,15 +392,39 @@ void* copy_mm(struct mm_struct* dst, const struct mm_struct* src) {
 }
 
 long do_fork(struct pt_regs* regs) {
-    printk("do_fork: %" PRIu64 " -> %" PRIu64 "\n", current->pid, num_tasks);
-    uint64_t child_pid = num_tasks++;
+    uint64_t child_pid = get_avail_task_id();
+    printk(MSG("process", "do_fork: %" PRIu64 " -> %" PRIu64 "\n"), current->pid, child_pid);
+    
+    if (task[child_pid] == NULL) {
+        task[child_pid] = (struct task_struct*)alloc_page();
+    }
 
-    task[child_pid] = (struct task_struct*)alloc_page();
     memcpy(task[child_pid], current, PGSIZE);
     task[child_pid]->pid = child_pid;
+    task[child_pid]->fpid = current->pid;
     task[child_pid]->state = TASK_RUNNING;
     task[child_pid]->priority = randint(PRIORITY_MIN, PRIORITY_MAX);
     task[child_pid]->counter = 0;
+    task[child_pid]->cpid = alloc_page();
+    memset(task[child_pid]->cpid, 0, PGSIZE);
+    task[child_pid]->child_cnt = 0;
+    current->cpid[current->child_cnt++] = child_pid;
+
+    task[child_pid]->files = file_init();
+    for (int i = 3; i < MAX_FILE_NUMBER; i++) {
+        if (current->files->fd_array[i].opened) {
+            int res = -1;
+            struct file* child_file = &task[child_pid]->files->fd_array[i];
+            res = file_open(child_file, current->files->fd_array[i].path, current->files->fd_array[i].flags);
+            if (!res) {
+                child_file->opened = 1;
+                child_file->lseek(child_file, current->files->fd_array[i].cfo, SEEK_SET);
+            }
+        }
+    }
+
+    signal_init(child_pid);
+    task[child_pid]->exit_code = 0;
 
     uint64_t delta = (uint64_t)task[child_pid] - (uint64_t)current;
     task[child_pid]->thread.ra = (uint64_t)&ret_from_fork;
@@ -432,6 +498,11 @@ int do_execve(const char* pathname, char* const argv[], char* const envp[]) {
         return -1;
     }
 
+    if (check_elf_header(elf_header) == -1) {
+        sys_close(fd);
+        return -1;
+    }
+
     struct vm_area_struct* vma = current->mm->mmap;
     while (vma != NULL) {
         struct vm_area_struct* next = vma->vm_next;
@@ -446,8 +517,6 @@ int do_execve(const char* pathname, char* const argv[], char* const envp[]) {
     current->mm->num_vmas = 0;
     current->mm->free_vma_list = NULL;
 
-    // delete_mapping(current->pgd);
-    // copy_mapping(current->pgd, swapper_pg_dir);
     struct file* file = &current->files->fd_array[fd];
     load_program(current, elf_header, file);
     free_pages(elf_header);
@@ -468,4 +537,74 @@ int do_execve(const char* pathname, char* const argv[], char* const envp[]) {
     ret_from_execve(current);
     
     return -1;
+}
+
+void wake_up_process(int pid) {
+    wait_queue[pid].valid = 0;
+    wait_queue[pid].mask = 0ULL;
+    task[pid]->state = TASK_RUNNING;
+}
+
+void do_exit(int status) {
+    current->state = TASK_ZOMBIE;
+    current->priority = 0;
+    current->counter = 0;
+    current->exit_code = status & 0xff;
+
+    struct vm_area_struct* vma = current->mm->mmap;
+    while (vma != NULL) {
+        struct vm_area_struct* next = vma->vm_next;
+        remove_mapping(current->pgd, vma->vm_start, vma->vm_end - vma->vm_start);
+        remove_vma(current->mm, vma);
+        vma = next;
+    }
+    
+    free_pages(current->mm);
+    current->mm = NULL;
+
+    asm volatile("sfence.vma" ::: "memory");
+
+    // Adoption
+    for (uint64_t i = 0; i < current->child_cnt; i++) {
+        task[current->cpid[i]]->fpid = 1;
+        task[1]->cpid[task[1]->child_cnt++] = current->cpid[i];
+    }
+    free_pages(current->cpid);
+    current->cpid = NULL;
+    current->child_cnt = 0;
+
+    for (int i = 3; i < MAX_FILE_NUMBER; i++) {
+        if (current->files->fd_array[i].opened) { 
+            sys_close(i);
+        }
+    }
+    free_pages(current->files);
+    current->files = NULL;
+
+    free_pages(current->signal);
+    current->signal = NULL;
+
+    do_kill(current->fpid, SIGCHLD);
+
+    wait_queue[current->pid].valid = 0;
+    if (wait_queue[current->fpid].valid && wait_queue[current->fpid].mask & (1 << current->pid)) {
+        wake_up_process(current->fpid);
+    }
+
+    schedule();
+}
+
+void wait_queue_add(int pid, int wpid) {
+    if (wpid == -1) {
+        wait_queue[pid].mask = -1;
+    } else {
+        wait_queue[pid].mask |= 1 << wpid;
+    }
+}
+
+void do_wait(int pid, int *status, int options) {
+    current->state = TASK_INTERRUPTIBLE;
+    wait_queue_add(current->pid, pid);
+    wait_queue[current->pid].valid = 1;
+    schedule();
 }

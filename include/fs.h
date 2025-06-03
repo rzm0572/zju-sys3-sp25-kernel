@@ -34,6 +34,7 @@ struct file {   // Opened file in a thread.
     uint32_t perms;
     int64_t cfo;
     uint32_t fs_type;
+    uint32_t flags;
 
     union {
         struct fat32_file fat32_file;

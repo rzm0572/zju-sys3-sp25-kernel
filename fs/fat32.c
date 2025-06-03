@@ -30,20 +30,13 @@ uint32_t next_cluster(uint64_t cluster) {
 }
 
 void fat32_init(uint64_t lba, uint64_t size) {
+    (void)size;
     virtio_blk_read_sector(lba, (void*)&fat32_header);
     fat32_volume.first_fat_sec = lba + fat32_header.rsvd_sec_cnt;
     fat32_volume.sec_per_cluster = fat32_header.sec_per_clus;
     fat32_volume.first_data_sec = fat32_volume.first_fat_sec + fat32_header.num_fats * fat32_header.fat_sz32;
     fat32_volume.fat_sz = fat32_header.fat_sz32;
     virtio_blk_read_sector(fat32_volume.first_fat_sec, fat32_buf);
-    // if (*(uint32_t *)fat32_buf != 0x0fFFFFf8)
-    // {
-    //     printk("%lx %lx\n", fat32_volume.first_fat_sec, *(uint32_t *)fat32_buf);
-    //     printk("fat32_init: FAT volume is invalid\n");
-    // }
-    // else {
-    //     printk("fat32_init: FAT volume is valid\n");
-    // }
 }
 
 int is_fat32(uint64_t lba) {
@@ -117,7 +110,6 @@ struct fat32_dir open_dir(const char *path, char* filename) {
             virtio_blk_read_sector(cluster_to_sector(cluster), fat32_buf);
             for (unsigned long i = 0; i < FAT32_ENTRY_PER_SECTOR; i++) {
                 if (entry[i].name[0] == 0x00) {
-                    printk("[fat32_open_file] %s: no such file or directory\n", path);
                     dir.cluster = INVALID_CLUSTER;
                     dir.index = -1;
                     return dir;  // not found
@@ -168,7 +160,7 @@ struct fat32_file fat32_open_file(const char *path) {
         return file;
     }
     if (dir.cluster == 0) {
-        printk("%s: not a file\n", path);
+        printk(ERR("fat32_open_file", "%s: not a file\n"), path);
         return file;
     }
 
@@ -176,24 +168,20 @@ struct fat32_file fat32_open_file(const char *path) {
     struct fat32_dir_entry *entry = (struct fat32_dir_entry*)fat32_buf;
 
     while (cluster != INVALID_CLUSTER) {
-        // printk("sector: %lx\n", cluster_to_sector(cluster));
         virtio_blk_read_sector(cluster_to_sector(cluster), fat32_buf);
         for (unsigned long i = 0; i < FAT32_ENTRY_PER_SECTOR; i++) {
-            // printk("%lu %s\n", i, entry[i].name);
             if (entry[i].name[0] == 0x00) {
-                // printk("%lu: empty entry\n", i);
+                printk(ERR("fat32_open_file", "%s: no such file or directory\n"), path);
                 return file;  // not found
             }
             if (entry[i].name[0] == 0xe5) {
-                // printk("%lu: deleted entry\n", i);
                 continue;  // deleted
             }
             if (entry[i].attr & 0x08) {
-                // printk("%lu: volume label\n", i);
                 continue;  // long name
             }
             if (entry[i].attr & 0x10) {
-                printk("%lu: directory\n", i);
+                printk(ERR("fat32_open_file", "%lu: directory\n"), i);
                 continue;  // directory
             }
             char exist_filename[12];
@@ -219,6 +207,7 @@ struct fat32_file fat32_open_dir(const char *path) {
 
     struct fat32_dir dir = open_dir(path, dirname);
     if (dir.cluster == INVALID_CLUSTER) {
+        printk(ERR("fat32_open_dir", "%s: no such file or directory\n"), path);
         return file;
     }
     if (dir.cluster == 0) {
@@ -231,20 +220,17 @@ struct fat32_file fat32_open_dir(const char *path) {
     uint32_t cluster = dir.cluster;
     struct fat32_dir_entry *entry = (struct fat32_dir_entry*)fat32_buf;
     while (cluster != INVALID_CLUSTER) {
-        // printk("sector: %lx\n", cluster_to_sector(cluster));
         virtio_blk_read_sector(cluster_to_sector(cluster), fat32_buf);
         for (unsigned long i = 0; i < FAT32_ENTRY_PER_SECTOR; i++) {
             // printk("%lu %s\n", i, entry[i].name);
             if (entry[i].name[0] == 0x00) {
-                // printk("%lu: empty entry\n", i);
+                printk(ERR("fat32_open_dir", "%s: no such file or directory\n"), path);
                 return file;  // not found
             }
             if (entry[i].name[0] == 0xe5) {
-                // printk("%lu: deleted entry\n", i);
                 continue;  // deleted
             }
             if (entry[i].attr & 0x08) {
-                // printk("%lu: volume label\n", i);
                 continue;  // long name
             }
             if (entry[i].attr & 0x10) {
@@ -278,7 +264,7 @@ int64_t fat32_lseek(struct file* file, int64_t offset, uint64_t whence) {
         uint32_t file_sz = entry[file->fat32_file.dir.index].size;
         file->cfo = entry[file_sz].size + offset;
     } else {
-        printk("fat32_lseek: whence not implemented\n");
+        printk(ERR("fat32_lseek", "whence not implemented\n"));
         while (1);
     }
     return file->cfo;
@@ -289,7 +275,6 @@ uint64_t fat32_table_sector_of_cluster(uint32_t cluster) {
 }
 
 int64_t fat32_read(struct file* file, void* buf, uint64_t len) {
-    // printk("begin read\n");
     uint32_t cluster = file->fat32_file.cluster;
     uint64_t sector = cluster_to_sector(cluster);
     uint32_t dir_index = file->fat32_file.dir.index;
@@ -311,20 +296,17 @@ int64_t fat32_read(struct file* file, void* buf, uint64_t len) {
     uint64_t read_len = 0;
     while (read_len < len) {
         sector = cluster_to_sector(cluster);
-        // uint64_t offset = cfo % (fat32_volume.sec_per_cluster * VIRTIO_BLK_SECTOR_SIZE);
         uint64_t new_read_len = fat32_volume.sec_per_cluster * VIRTIO_BLK_SECTOR_SIZE - cfo;
         new_read_len = read_len + new_read_len > len ? len - read_len : new_read_len;
         virtio_blk_read_sector(sector, fat32_buf);
         memcpy(buf + read_len, fat32_buf + cfo, new_read_len);
         cfo += new_read_len;
         read_len += new_read_len;
-        // printk("read_len: %ld, new_read_len: %ld, cfo: %ld, len: %d\n", read_len, new_read_len, cfo, len);
         if (cfo >= fat32_volume.sec_per_cluster * VIRTIO_BLK_SECTOR_SIZE) {
             cluster = next_cluster(cluster);
             cfo -= fat32_volume.sec_per_cluster * VIRTIO_BLK_SECTOR_SIZE;
         }
     }
-    // printk("Completed read\n");
     file->cfo += read_len;
     return read_len;
 }
@@ -370,6 +352,9 @@ int64_t fat32_read_dir(struct file* file, void* buf, uint64_t len) {
                 break;
             }
             if (sub_entry[i].name[0] == 0xe5) {
+                continue;
+            }
+            if (sub_entry[i].attr & 0x08) {
                 continue;
             }
             struct dirent *dirent = (struct dirent*)buf + curr_entry_cnt;

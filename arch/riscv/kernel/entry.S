@@ -62,6 +62,9 @@ _traps:
 
     .globl ret_from_fork
 ret_from_fork:
+    mv a0, sp
+    call signal_handler
+
     # 恢复当前用户态栈指针的值
     ld t0, 0x108(sp)
     csrw sscratch, t0
@@ -119,7 +122,7 @@ __dummy:
     .globl __switch_to
 __switch_to:
     # 1. 将当前线程的 CPU Context 保存到 task_struct 上
-    addi t0, a0, 0x20
+    addi t0, a0, 0x38
     sd ra, 0x00(t0)
     sd sp, 0x08(t0)
     sd s0, 0x10(t0)
@@ -147,7 +150,7 @@ __switch_to:
     sd t1, 0x90(t0)
 
     # 2. 将目标线程的 CPU Context 从 task_struct 加载到寄存器
-    addi t0, a1, 0x20
+    addi t0, a1, 0x38
     ld ra, 0x00(t0)
     ld sp, 0x08(t0)
     ld s0, 0x10(t0)
@@ -189,7 +192,7 @@ __switch_to:
 
 .global ret_from_execve
 ret_from_execve:
-    addi t0, a0, 0x20
+    addi t0, a0, 0x38
     ld ra, 0x00(t0)
     ld sp, 0x08(t0)
     ld s0, 0x10(t0)

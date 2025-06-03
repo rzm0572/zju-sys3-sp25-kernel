@@ -21,6 +21,9 @@ long sys_mmap(void *addr, size_t len, int prot, int flags, int fd, long offset);
 long sys_munmap(void *addr, size_t len);
 long sys_getdents64(int fd, void *dirp, size_t count);
 long sys_execve(const char *filename, char *const argv[], char *const envp[]);
+long sys_waitpid(int pid, int *status, int options);
+void sys_exit(int status);
+
 
 typedef long (*syscall_handler_t)();
 

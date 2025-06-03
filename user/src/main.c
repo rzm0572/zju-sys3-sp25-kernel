@@ -246,7 +246,22 @@ int parse_cmd(char *cmd, int len) {
     DIR* dirp = fdopendir(fd);
     struct dirent *ent;
     while ((ent = readdir(dirp)) != NULL) {
-      printf("%s\n", ent->d_name);
+      // printf("%s\n", ent->d_name);
+      char name[9] = {0};
+      for (int i = 0; i < 8; i++) {
+        if (ent->d_name[i] == ' ' || ent->d_name[i] == '\0') {
+          break;
+        }
+        name[i] = ent->d_name[i];
+      }
+      printf("%s", name);
+
+      if (ent->d_type == DT_REG) {
+        if (ent->d_name[8] != ' ' && ent->d_name[8] != '\0') {
+          printf(".%s", ent->d_name + 8);
+        }
+      }
+      printf("\n");
     }
     closedir(dirp);
   }
@@ -327,7 +342,14 @@ int parse_cmd(char *cmd, int len) {
     return 1;
   }
   else if (cmd[0] == '/') {
-    execve(cmd, NULL, NULL);
+    int pid = fork();
+    if (pid) {
+      int status_code;
+      printf("waiting for child process %d ...\n", pid);
+      waitpid(pid, &status_code, 0);
+    } else {
+      execve(cmd, NULL, NULL);
+    }
   }
   else {
     printf("Command not supported: %s\n", cmd);
@@ -443,8 +465,7 @@ int main() {
   free(c[3]);
   free(c[4]);
 
-  while (1)
-    ;
+  exit(0);
 
   return 0;
 }

@@ -7,6 +7,7 @@
 #include <printk.h>
 #include <mman.h>
 #include <sys_dirent.h>
+#include <private_kdefs.h>
 
 extern struct task_struct *current;
 extern uint64_t num_tasks;
@@ -88,11 +89,11 @@ long sys_read(unsigned fd, char *buff, size_t count) {
     
     struct file *file = &current->files->fd_array[fd];
     if (!file->opened) {
-        printk("File not opened: %d\n", fd);
+        printk(MSG("syscall", "File not opened: %d\n"), fd);
         return ERROR_FILE_NOT_OPEN;
     }
     else if (!(file->perms & FILE_READABLE)) {
-        printk("File not readable: %d\n", fd);
+        printk(MSG("syscall", "File not readable: %d\n"), fd);
         return -1;
     }
     else {
@@ -115,11 +116,11 @@ long sys_write(unsigned fd, const char *buf, size_t count) {
     }
     struct file *file = &current->files->fd_array[fd];
     if (!file->opened) {
-        printk("File not opened: %d\n", fd);
+        printk(MSG("syscall", "File not opened: %d\n"), fd);
         return ERROR_FILE_NOT_OPEN;
     }
     else if (!(file->perms & FILE_WRITABLE)) {
-        printk("File not writable: %d\n", fd);
+        printk(MSG("syscall", "File not writable: %d\n"), fd);
         return -1;
     }
     else {
@@ -175,4 +176,17 @@ long sys_execve(const char *pathname, char *const argv[], char *const envp[]) {
     (void)envp;
     do_execve(pathname, NULL, NULL);
     return -1;
+}
+
+long sys_waitpid(int pid, int *status, int options) {
+    if (pid < 0 || pid >= (int)num_tasks) {
+        return -1;
+    }
+    
+    do_wait(pid, status, options);
+    return 0;
+}
+
+void sys_exit(int status) {
+    do_exit(status);
 }

@@ -3,6 +3,12 @@
 
 // #define ONBOARD
 
+#define GREENBOLD "\033[1;32m"
+#define REDBOLD "\033[1;31m"
+#define RESET "\033[0m"
+#define MSG(header, msg) GREENBOLD "[" header "]" RESET " " msg
+#define ERR(header, msg) REDBOLD "[" header "] " msg RESET
+
 #ifdef ONBOARD
     #define TIMECLOCK 200000
 #else

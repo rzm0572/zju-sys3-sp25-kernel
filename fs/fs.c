@@ -72,6 +72,7 @@ int32_t file_open(struct file* file, const char* path, int flags) {
     file->perms = get_perm(flags);
     file->cfo = 0;
     file->fs_type = get_fs_type(path);
+    file->flags = flags;
     memcpy(file->path, path, strlen(path) + 1);
 
     if (file->fs_type == FS_TYPE_FAT32) {
@@ -80,23 +81,23 @@ int32_t file_open(struct file* file, const char* path, int flags) {
         if (flags & O_DIRECTORY) {
             file->read = fat32_read_dir;
             file->fat32_file = fat32_open_dir(path);
-            printk("open dir, cluster: %d\n", file->fat32_file.cluster);
+            printk(MSG("file", "open dir, cluster: %d\n"), file->fat32_file.cluster);
         } else {
             file->read = fat32_read;
             file->fat32_file = fat32_open_file(path);
-            printk("open file, cluster: %d\n", file->fat32_file.cluster);
+            printk(MSG("file", "open file, cluster: %d\n"), file->fat32_file.cluster);
         }
         if (file->fat32_file.cluster == 0) {
-            printk("File not found: %s\n", path);
+            printk(MSG("file", ": %s\n"), path);
             return -1;
         }
         else return 0;
         // todo: check if fat32_file is valid (i.e. successfully opened) and return
     } else if (file->fs_type == FS_TYPE_EXT2) {
-        printk("Unsupport ext2\n");
+        printk(ERR("file", "Unsupport ext2\n"));
         return -1;
     } else {
-        printk("Unknown fs type: %s\n", path);
+        printk(ERR("file", "Unknown fs type: %s\n"), path);
         return -1;
     }
 }

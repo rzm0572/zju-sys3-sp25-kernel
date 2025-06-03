@@ -122,6 +122,18 @@ void ecall_from_user_mode_handler(struct pt_regs *regs, uint64_t scause, uint64_
             );
             break;
         }
+        case __NR_waitpid: {
+            ret = sys_waitpid(
+                (int)regs->x[RISCV_REG_A0],
+                (int*)regs->x[RISCV_REG_A1],
+                (int)regs->x[RISCV_REG_A2]
+            );
+            break;
+        }
+        case __NR_exit: {
+            sys_exit((int)regs->x[RISCV_REG_A0]);
+            // break;
+        }
         default: {
             printk(ERROR_COLOR "[S] Not implemented syscall: %" PRIu64 RESET_COLOR "\n", syscall_nr);
             break;
@@ -152,13 +164,13 @@ void do_page_fault(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
     
     // If the bad vaddr is not belong to any vm area, then it's an invalid address
     if (vma == NULL) {
-        printk(ERROR_COLOR "[S] Page fault at invalid address: 0x%p, reason: VMA not found" RESET_COLOR "\n", bad_vaddr);
+        printk(ERR("page fault", "[S] Page fault at invalid address: %p, reason: VMA not found\n"), bad_vaddr);
         return;
     }
 
     // If the page fault is caused by instruction access, check if the page is executable
     if (scause == SCAUSE_INST_PAGE_FAULT) {
-        printk(KERNEL_COLOR "[S]" RESET_COLOR " Instruction page fault; sepc = 0x%" PRIx64 ", stval = 0x%" PRIx64 "\n", regs->sepc, stval);
+        printk(KERNEL_COLOR "[S]" RESET_COLOR MSG("page fault", "Instruction page fault; sepc = 0x%" PRIx64 ", stval = 0x%" PRIx64 "\n"), regs->sepc, stval);
         if (!(vma->vm_flags & VM_EXEC)) {
             printk(ERROR_COLOR "[S] Instruction page fault at invalid address: 0x%p, reason: not executable" RESET_COLOR "\n", bad_vaddr);
             return;
@@ -167,18 +179,18 @@ void do_page_fault(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
 
     // If the page fault is caused by load access, check if the page is readable
     if (scause == SCAUSE_LOAD_PAGE_FAULT) {
-        printk(KERNEL_COLOR "[S]" RESET_COLOR " Load page fault; sepc = 0x%" PRIx64 ", stval = 0x%" PRIx64 "\n", regs->sepc, stval);
+        printk(KERNEL_COLOR "[S]" RESET_COLOR MSG("page fault", "Load page fault; sepc = 0x%" PRIx64 ", stval = 0x%" PRIx64 "\n"), regs->sepc, stval);
         if (!(vma->vm_flags & VM_READ)) {
-            printk(ERROR_COLOR "[S] Load page fault at invalid address: 0x%p, reason: not readable" RESET_COLOR "\n", bad_vaddr);
+            printk(KERNEL_COLOR "[S]" RESET_COLOR ERR("page fault", "Load page fault at invalid address: 0x%p, reason: not readable\n"), bad_vaddr);
             return;
         }
     }
 
     // If the page fault is caused by store access, check if the page is writable
     if (scause == SCAUSE_STORE_PAGE_FAULT) {
-        printk(KERNEL_COLOR "[S]" RESET_COLOR " Store/AMO page fault; sepc = 0x%" PRIx64 ", stval = 0x%" PRIx64 "\n", regs->sepc, stval);
+        printk(KERNEL_COLOR "[S]" RESET_COLOR MSG("page fault", "Store/AMO page fault; sepc = 0x%" PRIx64 ", stval = 0x%" PRIx64 "\n"), regs->sepc, stval);
         if (!(vma->vm_flags & VM_WRITE)) {
-            printk(ERROR_COLOR "[S] Store/AMO page fault at invalid address: 0x%p, reason: not writable" RESET_COLOR "\n", bad_vaddr);
+            printk(KERNEL_COLOR "[S]" RESET_COLOR ERR("page fault", "Store/AMO page fault at invalid address: 0x%p, reason: not writable\n"), bad_vaddr);
             return;
         }
     }
@@ -218,7 +230,7 @@ void do_page_fault(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
                 *pte_ptr = SV39_PTE(new_ppn, new_perm);
                 asm volatile("sfence.vma" : : : "memory");
 
-                printk("vma = 0x%" PRIx64 ", SHARED PAGE [PID = %" PRIu64 "], copy 0x%" PRIx64 " to 0x%" PRIx64 "\n", (uint64_t)vma, current->pid, (uint64_t)pa, (uint64_t)VA2PA(new_page));
+                printk(MSG("page fault", "vma = 0x%" PRIx64 ", SHARED PAGE [PID = %" PRIu64 "], copy 0x%" PRIx64 " to 0x%" PRIx64 "\n"), (uint64_t)vma, current->pid, (uint64_t)pa, (uint64_t)VA2PA(new_page));
             } else if (ref_cnt == 1) {
                 *pte_ptr &= ~SV39_PTE_S;
                 if (vma->vm_flags & VM_WRITE) {
@@ -264,6 +276,6 @@ void trap_handler(struct pt_regs *regs, uint64_t scause, uint64_t stval) {
     }
     // printk("[Trap] scause: %" PRIx64 ", sepc: %" PRIx64 "\n", scause, sepc);
     if (!handled) {
-        printk("[S] Unhandled trap: scause = %" PRIx64 ", stval = %" PRIx64 "\n", scause, stval);
+        printk(MSG("trap", "Unhandled trap: scause = %" PRIx64 ", stval = %" PRIx64 "\n"), scause, stval);
     }
 }

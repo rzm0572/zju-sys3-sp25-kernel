@@ -1,6 +1,7 @@
 #include <mbr.h>
 #include <virtio.h>
 #include <fat32.h>
+#include <private_kdefs.h>
 
 uint8_t mbr_buf[VIRTIO_BLK_SECTOR_SIZE];
 struct partition_info partitions[MBR_MAX_PARTITIONS];
@@ -19,6 +20,6 @@ void mbr_init() {
 void partition_init(int partion_number, uint64_t start_lba, uint64_t sector_count) {
     if (is_fat32(start_lba)) {
         fat32_init(start_lba, sector_count);
-        printk("...fat32 partition #%d init done!\n", partion_number);
+        printk(MSG("fat32", "...fat32 partition #%d init done!\n"), partion_number);
     }
 }
